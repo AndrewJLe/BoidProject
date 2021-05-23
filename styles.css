@@ -1,7 +1,30 @@
-/* .boid {
+* {
+  margin: 0 auto;
+  padding: 0;
+}
+
+body {
+  height: 100vh;
+}
+
+.boids {
+    position: absolute;
     width: 0;
     height: 0;
-    border-top: 10px solid transparent;
-    border-bottom: 10px solid transparent;
-    border-left: 50px solid rgb(62, 152, 255);
-  } */
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 25px solid rgb(62, 152, 255);
+}
+
+.canvas-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+}
+
+.canvas {
+    position: absolute;
+    background-color: #131313;
+    overflow: hidden;
+}
