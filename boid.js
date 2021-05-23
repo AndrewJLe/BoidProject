@@ -2,8 +2,8 @@
 function Boid(id) {
     this.id = id;
     // Model position
-    this.positionX = Math.random() * 250;
-    this.positionY = Math.random() * 250;
+    this.positionX = (Math.random() * 250) + 350;
+    this.positionY = (Math.random() * 250) + 350;
     // Model velocity
     this.velocityX = Math.random() * (Math.random() < 0.5 ? -1 : 1);
     this.velocityY = Math.random() * (Math.random() < 0.5 ? -1 : 1);
