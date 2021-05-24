@@ -17,7 +17,8 @@ function init() {
      * Initialize Boids
      */
     for (let i = 0; i < WORLD.NUM_BOIDS; i++) {
-        const boid = new Boid(i);
+        const isHighlighted = i === 0;
+        const boid = new Boid({ id: i, isHighlighted });
         boid.updateBoid();
     }
 

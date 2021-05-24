@@ -2,8 +2,11 @@ import { WORLD } from "./world.js"
 
 // Boid object
 class Boid {
-    constructor(id) {
+    constructor({ id, isHighlighted }) {
         this.id = id;
+        this.FOVEnabled;
+
+
         // Model position
         this.positionX = (Math.random() * WORLD.CANVAS_WIDTH);
         this.positionY = (Math.random() * WORLD.CANVAS_HEIGHT);
@@ -12,6 +15,9 @@ class Boid {
         this.velocityX = Math.random() * (Math.random() < 0.5 ? -1 : 1);
         this.velocityY = Math.random() * (Math.random() < 0.5 ? -1 : 1);
 
+        // Model field of vision
+        this.range = 250;
+
         // Add the element to DOM
         this.boidElement = document.createElement("div");
         this.boidElement.setAttribute("id", "boid" + this.id);
@@ -19,6 +25,11 @@ class Boid {
         document.getElementById("canvas").appendChild(this.boidElement);
 
         this.randomizeValues();
+
+        // Determines whether to draw FOV or other details
+        if (isHighlighted) {
+            this.toggleFOV();
+        }
     }
 
     randomizeValues() {
@@ -65,12 +76,30 @@ class Boid {
         }
     }
 
+    toggleFOV() {
+        if (!this.FOVEnabled) {
+            this.FOVElement = document.createElement("div");
+            this.FOVElement.classList.add("FOV");
+            this.FOVElement.style.width = `${this.range}px`;
+            this.FOVElement.style.height = `${this.range}px`;
+            this.boidElement.appendChild(this.FOVElement);
+        } else {
+            this.FOVElement.remove();
+        }
+
+        this.FOVEnabled = !this.FOVEnabled
+    }
+
     /**
      * Display boid into the DOM
      */
     drawBoid() {
         let ztransform = -Math.atan2(this.velocityY, this.velocityX);
         this.boidElement.style.transform = `translate(${this.positionX}px, ${this.positionY}px) rotateZ(${ztransform}rad)`;
+
+        if (this.highlighted) {
+            this.drawFOV();
+        }
     }
 
     logBoidDetails() {
@@ -79,6 +108,15 @@ class Boid {
         console.log("position y: " + this.positionY);
         console.log("velocity x: " + this.velocityX);
         console.log("velocity y: " + this.velocityY);
+    }
+
+    /**
+     * Draws FOV circle
+     */
+    drawFOV() {
+        if (!this.FOVEnabled || !this.FOVElement) return;
+
+        this.FOVElement.style.transform = `translate(${this.positionX}px, ${this.positionY}px)`;
     }
 }
 
