@@ -1,8 +1,7 @@
 import { Boid } from './boid.js';
-import { WORLD } from "./world.js";
+import { WORLD, appendFlock, flock } from "./world.js";
 
 function init() {
-
     /**
      * Initialize Canvas
      */
@@ -19,9 +18,22 @@ function init() {
     for (let i = 0; i < WORLD.NUM_BOIDS; i++) {
         const isHighlighted = i === 0;
         const boid = new Boid({ id: i, isHighlighted });
-        boid.updateBoid();
+        appendFlock(boid);
     }
 
+    gameLoop(0);
+}
+
+let lastTimestamp;
+
+function gameLoop(timestamp) {
+    for (let i = 0; i < flock.length; i++) {
+        const boid = flock[i];
+        boid.update(flock);
+        boid.draw();
+    }
+    window.requestAnimationFrame(gameLoop);
 }
 
 init();
+console.log(flock);
