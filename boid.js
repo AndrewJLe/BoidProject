@@ -2,506 +2,609 @@ import { WORLD } from "./world.js";
 import { distance2D } from "./utils.js";
 import { Vector2D } from "./vector.js";
 
+// Constants for better performance and readability
+const DEGREES_TO_RADIANS = Math.PI / 180;
+const DEFAULT_COEFFICIENTS = {
+    SEPARATION: 1e-2 * 25,
+    COHESION: 1e-2 * 25,
+    ALIGNMENT: 1e-3 * 25,
+    REPEL: 0.5,
+    GRAVITY: 2
+};
+
+const DEFAULT_SETTINGS = {
+    MAX_SPEED: 3,
+    RANGE: 150,
+    FOV_ANGLE: 130 * DEGREES_TO_RADIANS,
+    WALL_OFFSET: 20,
+    GRAVITY_OFFSET: -10
+};
+
 // Boid object
 class Boid {
-    FOVEnabled = false;
-    nearestNeigbhorEnabled = false;
-    neighbors = new Set();
-    neighborLineElements = {};
-
-    separateSteerElement;
-    cohereSteerElement;
-    alignSteerElement;
-
-    maxSpeed = 3;
-    range = 150;
-
-    leftSideFOV = 130 * (Math.PI / 180);
-    rightSideFOV = 130 * (Math.PI / 180);
+    // Pre-allocate vectors to avoid garbage collection
+    static _tempVector = new Vector2D(0, 0);
+    static _tempVector2 = new Vector2D(0, 0);
+    static _tempVector3 = new Vector2D(0, 0);
 
     constructor({ id, isHighlighted }) {
         this.id = id;
         this.highlighted = isHighlighted;
 
-        // Coefficients
-        this.separationCoefficient = 1e-2 * 25;
-        this.cohereCoefficient = 1e-2 * 25;
-        this.alignCoefficient = 1e-3 * 25;
+        // Configuration
+        this.maxSpeed = DEFAULT_SETTINGS.MAX_SPEED;
+        this.range = DEFAULT_SETTINGS.RANGE;
+        this.leftSideFOV = DEFAULT_SETTINGS.FOV_ANGLE;
+        this.rightSideFOV = DEFAULT_SETTINGS.FOV_ANGLE;
 
-        // Display lines or not
+        // Coefficients
+        this.separationCoefficient = DEFAULT_COEFFICIENTS.SEPARATION;
+        this.cohereCoefficient = DEFAULT_COEFFICIENTS.COHESION;
+        this.alignCoefficient = DEFAULT_COEFFICIENTS.ALIGNMENT;
+
+        // State
+        this.FOVEnabled = false; // Default to false for all boids
+        this.neighbors = new Set();
+        this.neighborLineElements = {};
+        this.neighborDistances = new Map(); // Cache distances
+
+        // Display flags
         this.showAlign = false;
         this.showCohere = false;
         this.showSeparate = false;
         this.showNeighbors = false;
+        this.showRepel = isHighlighted;
 
-        // Model position vector
-        this.position = new Vector2D(Math.random() * WORLD.CANVAS_WIDTH, Math.random() * WORLD.CANVAS_HEIGHT);
+        // Vectors
+        this.position = new Vector2D(
+            Math.random() * WORLD.CANVAS_WIDTH,
+            Math.random() * WORLD.CANVAS_HEIGHT
+        );
+        this.velocity = this._initializeVelocity();
 
-        // Model velocity vector
-        this.velocity = new Vector2D(Math.random() * 10 - 5, Math.random() * 10 - 5);
-        this.velocity.scale(this.maxSpeed);
-
+        // DOM elements
         this.initializeDOMElements(isHighlighted);
     }
 
+    _initializeVelocity() {
+        const velocity = new Vector2D(Math.random() * 10 - 5, Math.random() * 10 - 5);
+        velocity.scale(this.maxSpeed);
+        return velocity;
+    }
+
     initializeDOMElements(isHighlighted) {
-        // Add boid element
+        this._createBoidElement();
+
+        if (isHighlighted) {
+            this._createSteerElements();
+            // Only create FOV elements if FOV is enabled
+            if (this.FOVEnabled) {
+                this._createFOVElements();
+            }
+        }
+    }
+
+    _createBoidElement() {
         this.boidElement = document.createElement("div");
         this.boidElement.setAttribute("id", "boid" + this.id);
         this.boidElement.classList.add("boids");
         document.getElementById("canvas").appendChild(this.boidElement);
+    }
 
-        // Determines whether to draw FOV or other details
-        if (isHighlighted) {
-            this.toggleFOV();
-            this.separateSteerElement = document.createElement("div");
-            this.separateSteerElement.classList.add("separate-line");
-            document.getElementById("canvas").appendChild(this.separateSteerElement);
-
-            this.cohereSteerElement = document.createElement("div");
-            this.cohereSteerElement.classList.add("cohere-line");
-            document.getElementById("canvas").appendChild(this.cohereSteerElement);
-
-            this.alignSteerElement = document.createElement("div");
-            this.alignSteerElement.classList.add("align-line");
-            document.getElementById("canvas").appendChild(this.alignSteerElement);
-
-            this.repelSteerElement = document.createElement("div");
-            this.repelSteerElement.classList.add("align-line");
-            document.getElementById("canvas").appendChild(this.repelSteerElement);
-            this.showRepel = true;
-        }
+    _createSteerElements() {
+        const steerTypes = ['separate', 'cohere', 'align', 'repel'];
+        steerTypes.forEach(type => {
+            const element = document.createElement("div");
+            element.classList.add(`${type}-line`);
+            document.getElementById("canvas").appendChild(element);
+            this[`${type}SteerElement`] = element;
+        });
     }
 
     update(flock, deltaT) {
-        // Search this boid for any nearby neighbors
+        // Update neighbor information
         this.findNeighborsWithinRange(flock);
 
-        // Apply boid rules
+        // Apply boid behaviors
+        this._applyBoidRules(deltaT);
+
+        // Apply movement constraints
+        this._applyConstraints(deltaT);
+
+        // Move the boid
+        this._updatePosition(deltaT);
+    }
+
+    _applyBoidRules(deltaT) {
         this.separate(deltaT);
         this.cohere(deltaT);
         this.align(deltaT);
-
-        // Apply constant velocity for boid
         this.speedControl();
-        this.moveBoid(deltaT);
+    }
 
-        // Ensure that the boid does not go towards infinity and beyond.
+    _applyConstraints(deltaT) {
         this.repel(deltaT);
         this.superGravity(deltaT);
     }
 
-    /**
-     * Move the boid's position
-     */
-    moveBoid(deltaT) {
-        const deltaV = new Vector2D(this.velocity.x, this.velocity.y);
-        deltaV.scale(deltaT);
-        this.position.add(deltaV);
+    _updatePosition(deltaT) {
+        // Reuse temp vector to avoid allocation
+        Boid._tempVector.x = this.velocity.x * deltaT;
+        Boid._tempVector.y = this.velocity.y * deltaT;
+        this.position.add(Boid._tempVector);
     }
 
     /**
-     * If the boid has moved close to the wall, steer it towards the center of the canvas
+     * Optimized wall repulsion with unified logic
      */
     repel(deltaT) {
-        const offset = 20;
         const { CANVAS_HEIGHT, CANVAS_WIDTH } = WORLD;
-        const bottomWall = CANVAS_HEIGHT - offset;
-        const rightWall = CANVAS_WIDTH - offset;
-        const topWall = offset;
-        const leftWall = offset;
-        const repelCoefficient = 0.5;
+        const offset = DEFAULT_SETTINGS.WALL_OFFSET;
 
-        var totalSteer = new Vector2D(0, 0);
+        // Reset temp vector
+        Boid._tempVector.x = 0;
+        Boid._tempVector.y = 0;
 
-        // Repel away from right wall
-        if (this.position.x > rightWall - this.range) {
-            const repelSteerX = this.repelSteer(-1, 0, Math.abs(rightWall - this.position.x));
-            totalSteer.add(repelSteerX);
+        // Check each wall and apply repulsion
+        this._checkWallRepulsion(this.position.x, CANVAS_WIDTH - offset, -1, 0, Boid._tempVector);
+        this._checkWallRepulsion(offset - this.position.x, this.range, 1, 0, Boid._tempVector);
+        this._checkWallRepulsion(this.position.y, CANVAS_HEIGHT - offset, 0, -1, Boid._tempVector);
+        this._checkWallRepulsion(offset - this.position.y, this.range, 0, 1, Boid._tempVector);
+
+        // Apply the accumulated repulsion force
+        if (Boid._tempVector.x !== 0 || Boid._tempVector.y !== 0) {
+            Boid._tempVector.scale(deltaT * DEFAULT_COEFFICIENTS.REPEL);
+            this.velocity.add(Boid._tempVector);
         }
+    }
 
-        // Repel away from left wall
-        else if (this.position.x < this.range) {
-            const repelSteerX = this.repelSteer(1, 0, Math.abs(this.position.x - leftWall));
-            totalSteer.add(repelSteerX);
+    _checkWallRepulsion(distance, threshold, dirX, dirY, accumulator) {
+        if (distance > threshold - this.range && distance < threshold) {
+            const distanceFromWall = Math.abs(threshold - distance);
+            const strengthRatio = Math.pow(1 - (distanceFromWall / this.range), 2);
+            accumulator.x += dirX * strengthRatio;
+            accumulator.y += dirY * strengthRatio;
         }
-
-        // Repel away from top wall
-        if (this.position.y > bottomWall - this.range) {
-            const repelSteerY = this.repelSteer(0, -1, Math.abs(bottomWall - this.position.y));
-            totalSteer.add(repelSteerY);
-        }
-
-        // Repel away from bottom wall
-        else if (this.position.y < this.range) {
-            const repelSteerY = this.repelSteer(0, 1, Math.abs(this.position.y - topWall));
-            totalSteer.add(repelSteerY);
-        }
-
-        this.velocity.add(totalSteer.scale(deltaT * repelCoefficient));
     }
 
     /**
-     * Super gravity
+     * Simplified super gravity implementation
      */
     superGravity(deltaT) {
         const { CANVAS_HEIGHT, CANVAS_WIDTH } = WORLD;
-        const offset = -10;
+        const offset = DEFAULT_SETTINGS.GRAVITY_OFFSET;
 
-        /**
-         * If the boid has moved close to the wall, steer it towards the center of the canvas
-         */
-        const gravity = 2
-        var steer = new Vector2D(0, 0);
-        var desiredVelocity = new Vector2D(WORLD.CANVAS_WIDTH / 2, WORLD.CANVAS_HEIGHT / 2);
-        desiredVelocity.subtract(this.position);
+        // Check if boid is near any boundary
+        const nearBoundary = (
+            this.position.x > CANVAS_WIDTH + offset ||
+            this.position.x < -offset ||
+            this.position.y > CANVAS_HEIGHT + offset ||
+            this.position.y < -offset
+        );
 
-        this.steerTowardsTarget(desiredVelocity);
-        const normalizedSteer = this.steerTowardsTarget(desiredVelocity);
-        normalizedSteer.scale(gravity);
-        steer.add(normalizedSteer);
+        if (nearBoundary) {
+            // Calculate direction to center
+            Boid._tempVector.x = CANVAS_WIDTH / 2 - this.position.x;
+            Boid._tempVector.y = CANVAS_HEIGHT / 2 - this.position.y;
 
-        if (this.position.x > CANVAS_WIDTH - offset) {
-            this.velocity.add(steer.scale(deltaT));
-        }
-        if (this.position.x < offset) {
-            this.velocity.add(steer.scale(deltaT));
-        }
-        if (this.position.y > CANVAS_HEIGHT - offset) {
-            this.velocity.add(steer.scale(deltaT));
-        }
-        if (this.position.y < offset) {
-            this.velocity.add(steer.scale(deltaT));
+            const steer = this.steerTowardsTarget(Boid._tempVector);
+            steer.scale(DEFAULT_COEFFICIENTS.GRAVITY * deltaT);
+            this.velocity.add(steer);
         }
     }
 
     /**
-     * Creates a steer vector scaled based on distance of boid to the wall
-     */
-    repelSteer(steerDirectionX, steerDirectionY, distance) {
-        var totalSteer = new Vector2D(0, 0);
-        if (distance > this.range) return totalSteer;
-        totalSteer.add(new Vector2D(steerDirectionX, steerDirectionY));
-        var strengthRatio = Math.pow(1 - (distance / this.range), 2);
-        return totalSteer.scale(strengthRatio);
-    }
-
-    /**
-     * Creates FOV element with blind spot
+     * Toggle FOV state and update visuals accordingly
      */
     toggleFOV() {
-        if (!this.FOVEnabled) {
-            const circumference = Math.PI * 2 * this.range / 2;
-            const viewPercentage = ((2 * this.leftSideFOV / (Math.PI / 180)) / 360) * 100; // Percentage of FOV that is not blind
-
-            // Create SVG element to contain FOV and Blindspot wedge
-            this.SVGElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            this.SVGElement.setAttributeNS(null, "height", `${this.range * 2}`);
-            this.SVGElement.setAttributeNS(null, "width", `${this.range * 2}`);
-            this.SVGElement.classList.add("FOV");
-
-            // Create blindspot wedge by making the FOV a certain percentage of the circle.
-            this.BlindSpotElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            this.BlindSpotElement.setAttributeNS(null, "height", `${this.range * 2}`);
-            this.BlindSpotElement.setAttributeNS(null, "width", `${this.range * 2}`);
-            this.BlindSpotElement.setAttributeNS(null, "cx", `${this.range}`);
-            this.BlindSpotElement.setAttributeNS(null, "cy", `${this.range}`);
-            this.BlindSpotElement.setAttributeNS(null, "r", `${this.range / 2}`);
-            this.BlindSpotElement.setAttributeNS(null, "fill", "none");
-
-            // Stroke creates the pie slice / blind spot
-            this.BlindSpotElement.setAttributeNS(null, "stroke", "grey");
-            this.BlindSpotElement.setAttributeNS(null, "stroke-opacity", "0");
-
-            // Stroke width hould be same as radius of FOV
-            this.BlindSpotElement.setAttributeNS(null, "stroke-width", `${this.range}`)
-
-            /*
-             * We will only need one of the dashes from the dasharray to be our blindspot/slice
-             * to do this, we increase the spacing between each wedge so we only see one.
-             * the stroke-dasharray gap is set to the circumference of the blindSpotElement circle.
-             * x value = viewPercentage   |    y value = circumference = 2 * pi * radius
-             */
-            console.log(this.BlindSpotElement);
-            console.log(this.SVGElement);
-
-            this.BlindSpotElement.setAttributeNS(null, "stroke-dasharray", `${viewPercentage * circumference / 100} ${circumference}`);
-            this.BlindSpotElement.classList.add("blindspot");
-            this.SVGElement.appendChild(this.BlindSpotElement);
-            this.boidElement.appendChild(this.SVGElement);
-        } else {
-            this.SVGElement.remove();
-        }
-        this.FOVEnabled = !this.FOVEnabled
+        this.FOVEnabled = !this.FOVEnabled;
+        this.updateFOVDisplay();
     }
 
     /**
-     * Speed Control
+     * Update FOV display based on current FOVEnabled state
+     */
+    updateFOVDisplay() {
+        if (this.FOVEnabled) {
+            if (!this.SVGElement) {
+                this._createFOVElements();
+            }
+            if (this.BlindSpotElement) {
+                this.BlindSpotElement.setAttribute('stroke-opacity', '0.3');
+            }
+        } else {
+            if (this.BlindSpotElement) {
+                this.BlindSpotElement.setAttribute('stroke-opacity', '0');
+            }
+        }
+    }
+
+    _createFOVElements() {
+        const circumference = Math.PI * this.range;
+        const viewPercentage = ((2 * this.leftSideFOV / DEGREES_TO_RADIANS) / 360) * 100;
+
+        // Create SVG container
+        this.SVGElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        this._setSVGAttributes(this.SVGElement, this.range * 2);
+
+        // Create blindspot circle
+        this.BlindSpotElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        this._setBlindSpotAttributes(this.BlindSpotElement, this.range, circumference, viewPercentage);
+
+        this.SVGElement.appendChild(this.BlindSpotElement);
+        this.boidElement.appendChild(this.SVGElement);
+    }
+
+    _setSVGAttributes(svg, size) {
+        svg.setAttribute("height", size);
+        svg.setAttribute("width", size);
+        svg.classList.add("FOV");
+    }
+
+    _setBlindSpotAttributes(circle, range, circumference, viewPercentage) {
+        const radius = range / 2;
+        const attributes = {
+            "height": range * 2,
+            "width": range * 2,
+            "cx": range,
+            "cy": range,
+            "r": radius,
+            "fill": "none",
+            "stroke": "grey",
+            "stroke-opacity": this.FOVEnabled ? "0.3" : "0",
+            "stroke-width": range,
+            "stroke-dasharray": `${viewPercentage * circumference / 100} ${circumference}`
+        };
+
+        Object.entries(attributes).forEach(([key, value]) => {
+            circle.setAttribute(key, value);
+        });
+
+        circle.classList.add("blindspot");
+    }
+
+    _removeFOVElements() {
+        if (this.SVGElement) {
+            this.SVGElement.remove();
+            this.SVGElement = null;
+            this.BlindSpotElement = null;
+        }
+    }
+
+    /**
+     * Optimized speed control using in-place normalization
      */
     speedControl() {
-        let newSpeed = this.velocity.normalize();
-        newSpeed.scale(this.maxSpeed);
-        this.velocity = newSpeed;
+        const magnitude = this.velocity.magnitude();
+        if (magnitude > 0) {
+            const scale = this.maxSpeed / magnitude;
+            this.velocity.scale(scale);
+        }
     }
 
     /**
-     * Find neighbors within this boid's range
+     * Optimized neighbor finding with distance caching
      */
     findNeighborsWithinRange(flock) {
-        flock.forEach((otherBoid) => {
-            if (otherBoid === this) return;
-            const isInsideRange = this.range >= distance2D([this.position.x, this.position.y], [otherBoid.position.x, otherBoid.position.y]);
+        // Clear previous neighbor distances
+        this.neighborDistances.clear();
 
-            if (isInsideRange) {
-                const vectorFromBoidToOther = new Vector2D(otherBoid.position.x, otherBoid.position.y);
-                vectorFromBoidToOther.subtract(this.position);
-                const angleBetweenNeighbor = this.velocity.angleBetweenVectors(vectorFromBoidToOther);
-                this.angleData = {
-                    angleBetweenNeighbor,
-                    vector1: this.velocity,
-                    vector2: vectorFromBoidToOther,
-                }
-                const isInsideFOV = (angleBetweenNeighbor > -this.leftSideFOV && angleBetweenNeighbor < this.rightSideFOV);
+        for (const otherBoid of flock) {
+            if (otherBoid === this) continue;
 
-                if (isInsideFOV) {
+            const distance = distance2D(
+                [this.position.x, this.position.y],
+                [otherBoid.position.x, otherBoid.position.y]
+            );
+
+            if (distance <= this.range) {
+                // Cache the distance for later use
+                this.neighborDistances.set(otherBoid, distance);
+
+                if (this._isInFieldOfView(otherBoid)) {
                     this.neighbors.add(otherBoid);
-                }
-                else {
+                } else {
                     this.neighbors.delete(otherBoid);
                 }
             } else {
                 this.neighbors.delete(otherBoid);
             }
-        });
+        }
 
         return this.neighbors;
     }
 
+    _isInFieldOfView(otherBoid) {
+        // Calculate vector from this boid to other boid (reuse temp vector)
+        Boid._tempVector.x = otherBoid.position.x - this.position.x;
+        Boid._tempVector.y = otherBoid.position.y - this.position.y;
+
+        const angleBetween = this.velocity.angleBetweenVectors(Boid._tempVector);
+        return angleBetween > -this.leftSideFOV && angleBetween < this.rightSideFOV;
+    }
+
     /**
-     * Avoid nearby boids
+     * Optimized separation with cached distances
      */
     separate(deltaT) {
-        var totalSteer = new Vector2D(0, 0);
+        if (this.neighbors.size === 0) return;
 
-        this.neighbors.forEach((neighborBoid) => {
-            var desiredVelocity = new Vector2D(this.position.x, this.position.y);
-            desiredVelocity.subtract(neighborBoid.position);
-            const normalizedSteer = this.steerTowardsTarget(desiredVelocity);
-            const distance = distance2D([this.position.x, this.position.y], [neighborBoid.position.x, neighborBoid.position.y]);
+        // Reset temp vector for accumulation
+        Boid._tempVector.x = 0;
+        Boid._tempVector.y = 0;
 
-            // A number from 0.0 - 1.0
+        for (const neighbor of this.neighbors) {
+            const distance = this.neighborDistances.get(neighbor);
+            if (!distance) continue;
+
+            // Calculate separation direction (reuse temp vector 2)
+            Boid._tempVector2.x = this.position.x - neighbor.position.x;
+            Boid._tempVector2.y = this.position.y - neighbor.position.y;
+
+            const steer = this.steerTowardsTarget(Boid._tempVector2);
             const strengthRatio = Math.pow(1 - (distance / this.range), 2);
             const steerStrength = strengthRatio * this.separationCoefficient;
 
-            // Set strength of separation according to distance (closer boids separate more strongly)
-            normalizedSteer.scale(steerStrength);
-            totalSteer.add(normalizedSteer);
-        });
-
-        if (this.showSeparate) {
-            var steerElementScale = new Vector2D(totalSteer.x, totalSteer.y);
-            this.drawLine(this.separateSteerElement, steerElementScale.scale(100));
+            steer.scale(steerStrength);
+            Boid._tempVector.add(steer);
         }
 
-        this.velocity.add(totalSteer.scale(deltaT));
+        this._drawSteerVector(this.separateSteerElement, Boid._tempVector, 100, this.showSeparate);
+
+        Boid._tempVector.scale(deltaT);
+        this.velocity.add(Boid._tempVector);
     }
 
     /**
-     * Move towards average direction of nearby boids
+     * Optimized alignment behavior
      */
     align(deltaT) {
+        if (this.neighbors.size === 0) return;
+
         // Calculate average velocity
-        var totalSteer = new Vector2D(0, 0);
-        var desiredVelocity = new Vector2D(0, 0);
-        this.neighbors.forEach((neighborBoid) => desiredVelocity.add(neighborBoid.velocity));
+        Boid._tempVector.x = 0;
+        Boid._tempVector.y = 0;
 
-        if (this.neighbors.size > 0) {
-            desiredVelocity.scale(1 / this.neighbors.size);
-            const normalizedSteer = this.steerTowardsTarget(desiredVelocity);
-            totalSteer = normalizedSteer.scale(this.alignCoefficient);
+        for (const neighbor of this.neighbors) {
+            Boid._tempVector.add(neighbor.velocity);
         }
 
-        if (this.showAlign) {
-            var steerElementScale = new Vector2D(totalSteer.x, totalSteer.y).scale(2000);
-            this.drawLine(this.alignSteerElement, steerElementScale);
-        }
+        Boid._tempVector.scale(1 / this.neighbors.size);
+        const steer = this.steerTowardsTarget(Boid._tempVector);
+        steer.scale(this.alignCoefficient);
 
-        this.velocity.add(totalSteer.scale(deltaT));
+        this._drawSteerVector(this.alignSteerElement, steer, 2000, this.showAlign);
+
+        steer.scale(deltaT);
+        this.velocity.add(steer);
     }
 
     /**
-     * Fly towards center of mass
+     * Optimized cohesion behavior
      */
     cohere(deltaT) {
-        var totalSteer = new Vector2D(0, 0);
-        var centerOfMass = new Vector2D(0, 0);
-        this.neighbors.forEach((neighborBoid) => centerOfMass.add(neighborBoid.position));
+        if (this.neighbors.size === 0) return;
 
-        if (this.neighbors.size > 0) {
-            centerOfMass.scale(1 / this.neighbors.size);
-            let desiredVelocity = new Vector2D(centerOfMass.x, centerOfMass.y)
-            desiredVelocity.subtract(this.position);
-            const normalizedSteer = this.steerTowardsTarget(desiredVelocity);
-            totalSteer = normalizedSteer.scale(this.cohereCoefficient);
+        // Calculate center of mass
+        Boid._tempVector.x = 0;
+        Boid._tempVector.y = 0;
+
+        for (const neighbor of this.neighbors) {
+            Boid._tempVector.add(neighbor.position);
         }
 
-        if (this.showCohere) {
-            var steerElementScale = new Vector2D(totalSteer.x, totalSteer.y).scale(300);
-            this.drawLine(this.cohereSteerElement, steerElementScale);
-        }
+        Boid._tempVector.scale(1 / this.neighbors.size);
 
-        this.velocity.add(totalSteer.scale(deltaT));
+        // Calculate direction to center of mass
+        Boid._tempVector2.x = Boid._tempVector.x - this.position.x;
+        Boid._tempVector2.y = Boid._tempVector.y - this.position.y;
+
+        const steer = this.steerTowardsTarget(Boid._tempVector2);
+        steer.scale(this.cohereCoefficient);
+
+        this._drawSteerVector(this.cohereSteerElement, steer, 300, this.showCohere);
+
+        steer.scale(deltaT);
+        this.velocity.add(steer);
     }
 
     /**
-     * Steer towards a direction
-     * @param {Vector2D} desiredDirection A vector representing the desired steering direction
-     * 
-     * @returns {Vector2D} Returns a normalized vector pointing towards the target direction
+     * Helper method for drawing steer vectors
+     */
+    _drawSteerVector(element, vector, scale, shouldDraw) {
+        if (!element) return;
+
+        if (!shouldDraw) {
+            // Fully hide the element so stale vectors are not visible and it doesn't affect layout
+            try {
+                element.style.display = 'none';
+                element.style.height = '0px';
+                element.style.transform = 'none';
+            } catch (e) {
+                // defensive: ignore DOM write errors
+            }
+            return;
+        }
+
+        // Ensure element is visible when we need to draw
+        try {
+            element.style.display = 'block';
+        } catch (e) {
+            /* ignore */
+        }
+
+        Boid._tempVector3.x = vector.x * scale;
+        Boid._tempVector3.y = vector.y * scale;
+        this.drawLine(element, Boid._tempVector3);
+    }
+
+    /**
+     * Optimized steer calculation that modifies input vector
      */
     steerTowardsTarget(desiredDirection) {
-        const desiredVelocity = desiredDirection.normalize();
-        desiredVelocity.scale(this.maxSpeed);
+        const magnitude = desiredDirection.magnitude();
+        if (magnitude === 0) return new Vector2D(0, 0);
 
-        var desiredSteer = new Vector2D(desiredVelocity.x, desiredVelocity.y);
-        desiredSteer.subtract(this.velocity);
+        // Normalize in-place for efficiency
+        const scale = this.maxSpeed / magnitude;
+        desiredDirection.scale(scale);
 
-        return desiredSteer.normalize();
+        // Calculate steering force
+        const steer = new Vector2D(
+            desiredDirection.x - this.velocity.x,
+            desiredDirection.y - this.velocity.y
+        );
+
+        return steer.normalize();
     }
 
     /**
-     * Draws a line originating from this boid with the given vector values
+     * Optimized line drawing with fewer calculations
      */
     drawLine(lineElement, vector, styles = {}) {
-        const transforms = [];
-        const offset = 8; // Offset the translation to center the drawn line on the boid
+        if (!lineElement) return;
 
-        // Ensures the line that is drawn does not extend past the FOV
-        var tempVector = new Vector2D(vector.x, vector.y);
-        if (tempVector.magnitude() >= this.range) {
-            tempVector.scale(this.range / tempVector.magnitude());
+        // Use temp vector to avoid modifying input
+        Boid._tempVector3.x = vector.x;
+        Boid._tempVector3.y = vector.y;
+
+        // Clamp vector to range
+        const magnitude = Boid._tempVector3.magnitude();
+        if (magnitude > this.range) {
+            const scale = this.range / magnitude;
+            Boid._tempVector3.scale(scale);
         }
 
-        /**
-         * The line is rotated about its center. So we need to move the center of the line to the point
-         * exactly halfway between the boids.
-         */
+        const lineLength = Boid._tempVector3.magnitude();
+        if (lineLength === 0) return;
 
-        // Use the distance between the points as the line length
-        const lineLength = tempVector.magnitude();
-        const translationX = this.position.x + offset + tempVector.x / 2;
-        const translationY = this.position.y + offset + tempVector.y / 2 - (lineLength / 2); // Line length needed to cancel the height of the div I guess.
-        transforms.push(`translate(${translationX}px, ${translationY}px)`);
+        // Calculate position and rotation
+        const offset = 8;
+        const translationX = this.position.x + offset + Boid._tempVector3.x / 2;
+        const translationY = this.position.y + offset + Boid._tempVector3.y / 2 - (lineLength / 2);
+        const rotationInRadians = Math.PI / 2 + Boid._tempVector3.angle();
 
-        // Rotate the line to point in the direction of the vector
-        // Since vector <X, Y> points from this boid to the other boid, we can pass this to angle()
-        const rotationInRadians = Math.PI / 2 + vector.angle();
-        transforms.push(`rotate(${rotationInRadians}rad)`);
-        const transform = transforms.join(" ");
+        // Apply styles and transforms
+        const transform = `translate(${translationX}px, ${translationY}px) rotate(${rotationInRadians}rad)`;
 
-        Object.entries(styles).forEach(([property, value]) => lineElement.style[property] = value);
+        lineElement.style.display = 'block';
         lineElement.style.transform = transform;
         lineElement.style.height = `${lineLength}px`;
+
+        // Apply custom styles
+        Object.assign(lineElement.style, styles);
     }
 
     /**
-     * Display boid into the DOM
+     * Main drawing method with optimized conditional rendering
      */
     draw() {
+        this.drawBoid();
+
         if (this.highlighted) {
             this.drawNeighbors();
         }
-
-        this.drawBoid();
     }
 
     /**
-     * Console log boid id, position, and velocity
-     */
-    logBoidDetails() {
-        console.log("boid id: " + this.id);
-        console.log("position x: " + this.position.x);
-        console.log("position y: " + this.position.y);
-        console.log("velocity x: " + this.velocity.x);
-        console.log("velocity y: " + this.velocity.y);
-    }
-
-    /**
-     * Draws the boid body
+     * Optimized boid drawing with cached transforms
      */
     drawBoid() {
-        const styles = {};
-        const transforms = [];
-
-        const positionTransform = `translate(${this.position.x}px, ${this.position.y}px)`;
-        transforms.push(positionTransform);
-
         const rotationInRadians = this.velocity.angle();
-        const rotationTransform = `rotateZ(${rotationInRadians}rad)`;
-        transforms.push(rotationTransform);
+        const transform = `translate(${this.position.x}px, ${this.position.y}px) rotateZ(${rotationInRadians}rad)`;
+        this.boidElement.style.transform = transform;
+    }
 
-        styles.transform = transforms.join(" ");
+    /**
+     * Debug method for logging boid details
+     */
+    logBoidDetails() {
+        console.log(`Boid ${this.id}: pos(${this.position.x.toFixed(2)}, ${this.position.y.toFixed(2)}) vel(${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)})`);
+    }
 
-        Object.entries(styles).forEach(([CSSProperty, value]) => {
-            this.boidElement.style[CSSProperty] = value;
+    /**
+     * Optimized neighbor line drawing with better cleanup
+     */
+    drawNeighbors() {
+        if (!this.showNeighbors) {
+            this._hideAllNeighborLines();
+            return;
+        }
+
+        if (this.neighbors.size === 0) {
+            this._hideAllNeighborLines();
+            return;
+        }
+
+        // Clean up lines for boids no longer in range
+        this._cleanupOutOfRangeLines();
+
+        // Draw lines to current neighbors
+        for (const neighbor of this.neighbors) {
+            this.drawLineToOtherBoid(neighbor);
+        }
+    }
+
+    _cleanupOutOfRangeLines() {
+        const currentNeighborIds = new Set([...this.neighbors].map(b => b.id));
+
+        for (const boidId of Object.keys(this.neighborLineElements)) {
+            if (!currentNeighborIds.has(parseInt(boidId))) {
+                this.neighborLineElements[boidId]?.remove();
+                delete this.neighborLineElements[boidId];
+            }
+        }
+    }
+
+    _cleanupAllNeighborLines() {
+        Object.values(this.neighborLineElements).forEach(element => element?.remove());
+        this.neighborLineElements = {};
+    }
+
+    _hideAllNeighborLines() {
+        Object.values(this.neighborLineElements).forEach(element => {
+            if (element) element.style.display = 'none';
         });
     }
 
     /**
-     * Draws lines to the neighbors
+     * Optimized line drawing to other boids
      */
-    drawNeighbors() {
-        /**
-         * Clean now out of range boids
-         */
-        // Find which birds are now out of range
-        const outOfRangeBoidIds = new Set(Object.keys(this.neighborLineElements));
-        this.neighbors.forEach((neighborBoid) => {
-            // Remove boids still in range
-            outOfRangeBoidIds.delete(neighborBoid.id);
-        });
-
-        // Delete the line DOM elements for out of range boids and delete from the hash table
-        outOfRangeBoidIds.forEach((outOfRangeBoidId) => {
-            this.neighborLineElements[outOfRangeBoidId]?.remove();
-            delete this.neighborLineElements[outOfRangeBoidId];
-        })
-
-        if (this.neighbors.size === 0) return;
-
-        this.neighbors.forEach((neighborBoid) => this.drawLineToOtherBoid(neighborBoid));
-    }
-
     drawLineToOtherBoid(otherBoid) {
-        if (!this.showNeighbors) {
-            return;
-        }
-        // Check hash table to see if the line DOM element is already created.
+        if (!this.showNeighbors) return;
+
         let lineElement = this.neighborLineElements[otherBoid.id];
         if (!lineElement) {
-            // If the DOM element is not created, then create it
-            lineElement = document.createElement("div");
-            lineElement.classList.add("neighbor-line");
-            lineElement.setAttribute("id", `${this.id}-to-${otherBoid.id}`)
-
-            // Record this DOM element in hash table
-            this.neighborLineElements[otherBoid.id] = lineElement;
-            document.getElementById("canvas").appendChild(lineElement);
+            lineElement = this._createNeighborLineElement(otherBoid);
         }
 
-        const vectorToOtherBoid = new Vector2D(otherBoid.position.x, otherBoid.position.y);
-        vectorToOtherBoid.subtract(this.position);
+        // Use cached distance if available
+        const distance = this.neighborDistances.get(otherBoid) ||
+            distance2D([this.position.x, this.position.y], [otherBoid.position.x, otherBoid.position.y]);
 
-        const lineLength = vectorToOtherBoid.magnitude();
+        // Calculate vector to other boid
+        Boid._tempVector.x = otherBoid.position.x - this.position.x;
+        Boid._tempVector.y = otherBoid.position.y - this.position.y;
 
-        // Determines the thickness/weight of the line
-        const width = `${Math.sqrt(5 * (this.range - lineLength) / this.range)}px`;
+        // Calculate line styles based on distance
+        const distanceRatio = (this.range - distance) / this.range;
+        const styles = {
+            width: `${Math.sqrt(5 * distanceRatio)}px`,
+            opacity: `${100 * distanceRatio}%`
+        };
 
-        // Reduce opacity when distance is close to the range limit
-        const opacity = `${100 * (this.range - lineLength) / this.range}%`;
+        this.drawLine(lineElement, Boid._tempVector, styles);
+    }
 
-        const styles = { width, opacity };
-        this.drawLine(lineElement, vectorToOtherBoid, styles);
+    _createNeighborLineElement(otherBoid) {
+        const lineElement = document.createElement("div");
+        lineElement.classList.add("neighbor-line");
+        lineElement.setAttribute("id", `${this.id}-to-${otherBoid.id}`);
+
+        this.neighborLineElements[otherBoid.id] = lineElement;
+        document.getElementById("canvas").appendChild(lineElement);
+
+        return lineElement;
     }
 }
 

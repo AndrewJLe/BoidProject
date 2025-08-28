@@ -1,34 +1,182 @@
-# BoidProject
+# 🐦 Boids Flocking Simulation
 
-Boids is an artificial life program that simulates the behavior of birds, fish, and swarms.
+A modern, interactive implementation of Craig Reynolds' classic boids flocking algorithm with real-time parameter controls and algorithm visualization.
 
-Live Preview: https://andrewjle.github.io/BoidProject/
+## ✨ Features
 
+### 🎮 Interactive Controls
+- **Real-time parameter adjustment** with smooth sliders
+- **Visualization toggles** for FOV, neighbor lines, and steering forces
+- **Simulation controls** for pause/resume and reset
+- **Modern UI** with clean, responsive design
 
-**BOID CONTROLLER**
+### 🧠 Algorithm Showcase
+- **Interactive demos** for each flocking behavior
+- **Real-time explanations** of separation, cohesion, and alignment
+- **Visual demonstrations** showing how each algorithm works
+- **Mini-canvas** with slow-motion algorithm visualization
 
-**Toggles**
+### 🔧 Performance Optimizations
+- **Memory-efficient** vector operations with object reuse
+- **Distance caching** to eliminate redundant calculations
+- **Optimized DOM manipulation** for smooth 60fps performance
+- **Smart neighbor detection** with field-of-view constraints
 
-Note: Toggles will only be performed on the boid of interest whom is colored black, however, it is a representation of the whole flock.
+## 🚀 Getting Started
 
-Field Of View - Displays a highlighted region representing the boid's field of view. The highlighted region is where the boid can see and detect other boids. There is a blind spot located behind the boid where the boid is not able to see or detect other boids.
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/AndrewJLe/BoidProject.git
+   cd BoidProject
+   ```
 
-Separation Vector - Displays the direction and magnitude that the boid is steering (Green). The boid calculates the position of all other boids inside its field of view, averages it, and then steers in the opposite direction in order to avoid it. The closer a neighboring boid is, the stronger the repulsion.
+2. **Open in browser**
+   ```bash
+   # Serve locally (recommended)
+   python -m http.server 8000
+   # or
+   npx serve .
+   
+   # Then visit http://localhost:8000
+   ```
 
-Cohesion Vector - Displays the direction and magnitude that the boid is steering (Blue). The boid calculates the center of mass by calculating the average position of the boids inside its field of view and then steers towards it.
+3. **Start experimenting!**
+   - Adjust the sliders to see how parameters affect flocking behavior
+   - Toggle visualizations to understand the underlying algorithms
+   - Click algorithm tabs to learn how each behavior works
 
-Alignment Vector - Displays the direction and magnitude that the boid is steering (Yellow). The boid calculates the average velocity of all boids inside its field of view and then steers towards it.
+## 🎯 How It Works
 
-Neighbor Lines - Displays a line to and from any neighboring boid within the boid's field of view (Red). The boid calculates the distance of all other boids and if its position is within its vision range, it is considered a neighbor.
+### Core Algorithms
 
-**Sliders**
+**Separation**: Boids steer away from nearby neighbors to avoid crowding
+- Calculates repulsion force based on distance
+- Closer neighbors create stronger repulsion
+- Results in natural spacing between boids
 
-Note: Sliders will affect every boid in the flock. A bigger coefficient correlates to a more strongly weighted behavior. All coefficient values are arbitrary.
+**Cohesion**: Boids are attracted to the center of mass of their neighbors
+- Finds average position of nearby boids
+- Steers toward the group's center
+- Creates tight flocking groups
 
-Field of View - The view range of each boid. 1 indicates a blind boid, while 300 represents a boid who is able to 300 pixels out in a 360 degree radius, excluding the blind spot.
+**Alignment**: Boids try to match the average velocity of their neighbors
+- Calculates average direction of nearby boids
+- Gradually turns to match group movement
+- Results in coordinated group behavior
 
-Separation Coefficient - How strongly a boid will separate from its neighbors. A coefficient of 0 indicates that a boid will not make any attempts to move away from incoming boids, while a 50 indicates that a boid will strongly repel from other boids.
+### Technical Implementation
 
-Cohesion Coefficient - How strongly a boid will steer towards its neighbors. A coefficient of 0 indicates that a boid will not make any attempts to move towards its neighbors, while a 50 indicates that a boid will strongly steers towards the center of mass of its neighbors.
+- **Canvas-based rendering** for smooth animation
+- **Modular architecture** with separate UI and simulation layers
+- **Responsive design** that works on desktop and mobile
+- **Real-time parameter updates** without simulation restart
 
-Alignment Coefficient - How strongly a boid will steer to align with its neighbor's general direction. A coefficient of 0 indicates that a boid will not make any attempts to align with its neighbors, while a 50 indicates that a boid will strongly steer in the general direction of its neighbors.
+## 🎨 UI Layout
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    🐦 Boids Simulation                   │
+├─────────────┬─────────────────────────┬─────────────────┤
+│   Controls  │                         │   Algorithm     │
+│             │                         │   Showcase      │
+│  • Toggles  │                         │                 │
+│  • Sliders  │                         │  • Tabs         │
+│  • Buttons  │                         │  • Info         │
+│             │                         │  • Mini Demo    │
+├─────────────┴─────────────────────────┴─────────────────┤
+│                                                         │
+│              🎯 Main Simulation Canvas                   │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │                                                 │   │
+│  │         Boids flying around here               │   │
+│  │                                                 │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                      📊 Stats          │
+└─────────────────────────────────────────────────────────┘
+```
+
+## 🎛️ Controls
+
+### Visualization
+- **Field of View**: Shows the detection range of the main boid
+- **Neighbor Lines**: Displays connections between nearby boids
+- **Separation**: Shows repulsion forces (green arrows)
+- **Cohesion**: Shows attraction to group center (blue arrows)
+- **Alignment**: Shows velocity matching forces (yellow arrows)
+
+### Parameters
+- **Field of View**: Detection range (50-300 pixels)
+- **Separation Force**: Strength of repulsion (0-50)
+- **Cohesion Force**: Strength of attraction (0-50)
+- **Alignment Force**: Strength of velocity matching (0-50)
+- **Max Speed**: Maximum boid velocity (1-10)
+
+### Simulation
+- **Reset**: Randomize all boid positions and velocities
+- **Pause/Resume**: Stop or continue the simulation
+
+## 📱 Responsive Design
+
+The interface automatically adapts to different screen sizes:
+- **Desktop**: Full three-panel layout
+- **Tablet**: Stacked panels with collapsible sections
+- **Mobile**: Single column with expandable controls
+
+## 🔧 Technical Details
+
+### Performance Optimizations
+- Pre-allocated static vectors to avoid garbage collection
+- Distance caching between boids to eliminate redundant calculations
+- Efficient DOM manipulation with minimal reflows
+- Smart field-of-view culling for neighbor detection
+
+### Code Structure
+```
+├── index.html          # Main HTML structure
+├── styles.css          # Modern CSS with CSS Grid and Flexbox
+├── index.js            # Main simulation loop
+├── ui-controller.js    # UI management and event handling
+├── boid.js             # Optimized Boid class
+├── vector.js           # 2D vector mathematics
+├── world.js            # World configuration
+└── utils.js            # Utility functions
+```
+
+## 🎓 Educational Value
+
+This simulation demonstrates:
+- **Emergent behavior** from simple rules
+- **Real-time algorithm visualization**
+- **Interactive parameter exploration**
+- **Performance optimization techniques**
+- **Modern web development practices**
+
+Perfect for:
+- Computer science students learning about emergent systems
+- Developers interested in animation and simulation
+- Anyone curious about how flocking behavior works in nature
+
+## 🚀 Future Enhancements
+
+- [ ] Predator-prey interactions
+- [ ] Obstacle avoidance
+- [ ] 3D boids simulation
+- [ ] Custom boid shapes and colors
+- [ ] Export simulation as GIF/video
+- [ ] Preset behavior patterns
+- [ ] Multi-species flocking
+
+## 📄 License
+
+MIT License - feel free to use this code for educational or commercial projects.
+
+## 🤝 Contributing
+
+Contributions welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
+
+---
+
+**Live Preview**: https://andrewjle.github.io/BoidProject/
+
+Built with ❤️ and modern web technologies

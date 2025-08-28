@@ -5,61 +5,195 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boids</title>
+    <title>Boids - Flocking Simulation</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="preconnect" href="https://fonts.gstatic.com">
-    <link href="https://fonts.googleapis.com/css2?family=Mukta+Mahee:wght@300&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 
 <body>
-    <div class="canvas-container" id="canvas-container"></div>
-    <div class="controller-wrapper">
-        <label for="menu-toggle" class="dropdown">Boid Controller</label>
-        <input type="checkbox" class="dropdown" id="menu-toggle" />
-        <ul id="menu">
-            <div class="switch-container">
-                <p> Field Of View
-                    <input type="checkbox" id="fov-switch" /><label for="fov-switch"
-                        class="display-boid-property-switch">Toggle</label>
-                </p>
-                <p> Separation Vector
-                    <input type="checkbox" id="separate-switch" /><label for="separate-switch"
-                        class="display-boid-property-switch">Toggle</label>
-                </p>
-                <p> Cohesion Vector
-                    <input type="checkbox" id="cohere-switch" /><label for="cohere-switch"
-                        class="display-boid-property-switch">Toggle</label>
-                </p>
-                <p> Alignment Vector
-                    <input type="checkbox" id="align-switch" /><label for="align-switch"
-                        class="display-boid-property-switch">Toggle</label>
-                </p>
-                <p> Neighbor Lines
-                    <input type="checkbox" id="neighbor-switch" /><label for="neighbor-switch"
-                        class="display-boid-property-switch">Toggle</label>
-                </p>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1><i class="fas fa-dove"></i> Boids Simulation</h1>
+            <p>Interactive flocking behavior demonstration</p>
+        </header>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Top UI Section (2/5 of screen) -->
+            <div class="ui-section">
+                <!-- Tab Navigation -->
+                <div class="tab-navigation">
+                    <button class="main-tab active" data-tab="controls">
+                        <i class="fas fa-sliders-h"></i> Controls
+                    </button>
+                    <button class="main-tab" data-tab="algorithms">
+                        <i class="fas fa-brain"></i> Algorithm Showcase
+                    </button>
+                </div>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+                    <!-- Controls Tab -->
+                    <div id="controls-tab" class="tab-panel active">
+                        <div class="controls-grid">
+                            <!-- Visualization Controls -->
+                            <div class="control-section">
+                                <h3>Visualization</h3>
+                                <div class="toggle-grid">
+                                    <div class="toggle-item">
+                                        <label for="fov-switch">Field of View</label>
+                                        <input type="checkbox" id="fov-switch" class="toggle-switch">
+                                        <span class="toggle-slider fov-color"></span>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="neighbor-switch">Neighbor Lines</label>
+                                        <input type="checkbox" id="neighbor-switch" class="toggle-switch">
+                                        <span class="toggle-slider neighbor-color"></span>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="separate-switch">Separation</label>
+                                        <input type="checkbox" id="separate-switch" class="toggle-switch">
+                                        <span class="toggle-slider separation-color"></span>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="cohere-switch">Cohesion</label>
+                                        <input type="checkbox" id="cohere-switch" class="toggle-switch">
+                                        <span class="toggle-slider cohesion-color"></span>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="align-switch">Alignment</label>
+                                        <input type="checkbox" id="align-switch" class="toggle-switch">
+                                        <span class="toggle-slider alignment-color"></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Parameter Controls -->
+                            <div class="control-section">
+                                <h3>Parameters</h3>
+                                <div class="slider-grid">
+                                    <div class="slider-item">
+                                        <label for="fov-range">
+                                            Field of View
+                                            <span class="value" id="fov-value">150</span>
+                                        </label>
+                                        <input type="range" id="fov-range" class="range-slider fov-range" min="50"
+                                            max="300" value="150">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="separation-range">
+                                            Separation Force
+                                            <span class="value" id="separation-value">25</span>
+                                        </label>
+                                        <input type="range" id="separation-range" class="range-slider separation-range"
+                                            min="0" max="50" value="25">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="cohere-range">
+                                            Cohesion Force
+                                            <span class="value" id="cohere-value">25</span>
+                                        </label>
+                                        <input type="range" id="cohere-range" class="range-slider cohere-range" min="0"
+                                            max="50" value="25">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="align-range">
+                                            Alignment Force
+                                            <span class="value" id="align-value">25</span>
+                                        </label>
+                                        <input type="range" id="align-range" class="range-slider align-range" min="0"
+                                            max="50" value="25">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="speed-range">
+                                            Max Speed
+                                            <span class="value" id="speed-value">3</span>
+                                        </label>
+                                        <input type="range" id="speed-range" class="range-slider speed-range" min="1"
+                                            max="10" value="3" step="0.1">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Simulation Controls -->
+                            <div class="control-section">
+                                <h3>Simulation</h3>
+                                <div class="button-grid">
+                                    <button class="control-btn primary" id="reset-btn">
+                                        <i class="fas fa-refresh"></i> Reset
+                                    </button>
+                                    <button class="control-btn secondary" id="pause-btn">
+                                        <i class="fas fa-pause"></i> Pause
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Algorithm Showcase Tab -->
+                    <div id="algorithms-tab" class="tab-panel">
+                        <div class="algorithm-showcase-grid">
+                            <!-- Algorithm Selection -->
+                            <div class="algorithm-section">
+                                <div class="algorithm-tabs">
+                                    <button class="tab-btn active" data-algorithm="overview">Overview</button>
+                                    <button class="tab-btn" data-algorithm="separation">Separation</button>
+                                    <button class="tab-btn" data-algorithm="cohesion">Cohesion</button>
+                                    <button class="tab-btn" data-algorithm="alignment">Alignment</button>
+                                </div>
+
+                                <div class="algorithm-info" id="algorithm-info">
+                                    <h3>Flocking Behavior</h3>
+                                    <p>Boids follow three simple rules that create emergent flocking behavior:</p>
+                                    <ul>
+                                        <li><strong>Separation:</strong> Avoid crowding neighbors</li>
+                                        <li><strong>Cohesion:</strong> Steer towards the center of neighbors</li>
+                                        <li><strong>Alignment:</strong> Steer towards the average heading of neighbors
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <!-- Demo Canvas -->
+                            <div class="demo-section">
+                                <div class="demo-canvas-container">
+                                    <canvas id="demo-canvas" width="400" height="280"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="slider-container" id="slider-container">
-                <p>Field Of View: <span id="fov-value" class="fov-value"></span></p>
-                <input type="range" min="1" max="300" value="150" id="fov-range" class="fov-range">
 
-                <p>Separation: <span id="separation-value" class="separation-value"></span></p>
-                <input type="range" min="0" max="50" value="25" id="separation-range" class="separation-range">
-
-                <p>Cohesion: <span id="cohere-value" class="cohere-value"></span></p>
-                <input type="range" min="0" max="50" value="25" id="cohere-range" class="cohere-range">
-
-                <p>Alignment: <span id="align-value" class="align-value"></span></p>
-                <input type="range" min="0" max="50" value="25" id="align-range" class="align-range">
-
+            <!-- Bottom Canvas Section (3/5 of screen) -->
+            <div class="canvas-section">
+                <div class="canvas-wrapper">
+                    <div class="canvas-container" id="canvas-container">
+                        <!-- Main boids canvas will be inserted here -->
+                    </div>
+                    <div class="canvas-overlay">
+                        <div class="stats-panel">
+                            <div class="stat-item">
+                                <span class="stat-label">Boids</span>
+                                <span class="stat-value" id="boid-count">100</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">FPS</span>
+                                <span class="stat-value" id="fps-counter">60</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-        </ul>
+        </div>
     </div>
 
-
+    <script type="module" src="index.js"></script>
+    <script type="module" src="ui-controller.js"></script>
 </body>
-
-
-<script type="module" src="index.js"></script>
 
 </html>
