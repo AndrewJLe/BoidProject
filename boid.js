@@ -2,22 +2,21 @@ import { WORLD } from "./world.js";
 import { distance2D } from "./utils.js";
 import { Vector2D } from "./vector.js";
 
-// Constants for better performance and readability
+// Constants for the Boids algorithm following the original pseudocode
 const DEGREES_TO_RADIANS = Math.PI / 180;
-const DEFAULT_COEFFICIENTS = {
-    SEPARATION: 1e-2 * 25,
-    COHESION: 1e-2 * 25,
-    ALIGNMENT: 1e-3 * 25,
-    REPEL: 0.5,
-    GRAVITY: 2
+
+// Rule coefficients following the original algorithm but with adjustments for smoother behavior
+const BOIDS_RULES = {
+    COHESION_FACTOR: 500,
+    SEPARATION_DISTANCE: 15,
+    ALIGNMENT_FACTOR: 50
 };
 
 const DEFAULT_SETTINGS = {
-    MAX_SPEED: 3,
-    RANGE: 150,
-    FOV_ANGLE: 130 * DEGREES_TO_RADIANS,
-    WALL_OFFSET: 20,
-    GRAVITY_OFFSET: -10
+    MAX_SPEED: 4.0,           // Speed limit as described in pseudocode
+    MIN_SPEED: 3.0,           // Minimum speed to keep moving
+    RANGE: 150,               // Neighbor detection range
+    FOV_ANGLE: 180 * DEGREES_TO_RADIANS,
 };
 
 // Boid object
@@ -37,16 +36,21 @@ class Boid {
         this.leftSideFOV = DEFAULT_SETTINGS.FOV_ANGLE;
         this.rightSideFOV = DEFAULT_SETTINGS.FOV_ANGLE;
 
-        // Coefficients
-        this.separationCoefficient = DEFAULT_COEFFICIENTS.SEPARATION;
-        this.cohereCoefficient = DEFAULT_COEFFICIENTS.COHESION;
-        this.alignCoefficient = DEFAULT_COEFFICIENTS.ALIGNMENT;
+        // Coefficients - these will be multiplied by the rule factors
+        this.separationCoefficient = 1.0;
+        this.cohereCoefficient = 1.0;
+        this.alignCoefficient = 1.0;
 
         // State
         this.FOVEnabled = false; // Default to false for all boids
         this.neighbors = new Set();
         this.neighborLineElements = {};
         this.neighborDistances = new Map(); // Cache distances
+
+        // Trail system for ghost effect
+        this.trailPositions = [];
+        this.maxTrailLength = 12;
+        this.trailElements = [];
 
         // Display flags
         this.showAlign = false;
@@ -89,6 +93,29 @@ class Boid {
         this.boidElement.setAttribute("id", "boid" + this.id);
         this.boidElement.classList.add("boids");
         document.getElementById("canvas").appendChild(this.boidElement);
+
+        // Create trail elements
+        this._createTrailElements();
+    }
+
+    _createTrailElements() {
+        for (let i = 0; i < this.maxTrailLength; i++) {
+            const trailElement = document.createElement("div");
+            trailElement.classList.add("boid-trail");
+            trailElement.style.opacity = "0";
+            document.getElementById("canvas").appendChild(trailElement);
+            this.trailElements.push(trailElement);
+        }
+    }
+
+    /**
+     * Set color for boid and its trail
+     */
+    setColor(color) {
+        this.boidElement.style.borderLeftColor = color;
+        this.trailElements.forEach(trail => {
+            trail.style.borderLeftColor = color;
+        });
     }
 
     _createSteerElements() {
@@ -105,92 +132,218 @@ class Boid {
         // Update neighbor information
         this.findNeighborsWithinRange(flock);
 
-        // Apply boid behaviors
-        this._applyBoidRules(deltaT);
+        // Apply the three boids rules following the original pseudocode
+        const v1 = this.rule1(flock); // Cohesion: fly towards center of mass
+        const v2 = this.rule2(flock); // Separation: keep distance from others
+        const v3 = this.rule3(flock); // Alignment: match velocity with neighbors
 
-        // Apply movement constraints
-        this._applyConstraints(deltaT);
+        // Additional rules for boundary behavior
+        const v4 = this.boundPosition();
+        // const v5 = this.tendToPlace(); // Optional: tendency towards center
 
-        // Move the boid
-        this._updatePosition(deltaT);
-    }
+        // Apply all velocity changes
+        this.velocity.add(v1);
+        this.velocity.add(v2);
+        this.velocity.add(v3);
+        this.velocity.add(v4);
+        // this.velocity.add(v5);
 
-    _applyBoidRules(deltaT) {
-        this.separate(deltaT);
-        this.cohere(deltaT);
-        this.align(deltaT);
-        this.speedControl();
-    }
+        // Limit velocity as described in the pseudocode
+        this.limitVelocity();
 
-    _applyConstraints(deltaT) {
-        this.repel(deltaT);
-        this.superGravity(deltaT);
-    }
-
-    _updatePosition(deltaT) {
-        // Reuse temp vector to avoid allocation
-        Boid._tempVector.x = this.velocity.x * deltaT;
-        Boid._tempVector.y = this.velocity.y * deltaT;
-        this.position.add(Boid._tempVector);
+        // Update position: position = position + velocity
+        const movement = new Vector2D(this.velocity.x * deltaT, this.velocity.y * deltaT);
+        this.position.add(movement);
     }
 
     /**
-     * Optimized wall repulsion with unified logic
+     * Rule 1: Boids try to fly towards the centre of mass of neighbouring boids
+     * Updated to only consider neighbors within range for better performance
      */
-    repel(deltaT) {
-        const { CANVAS_HEIGHT, CANVAS_WIDTH } = WORLD;
-        const offset = DEFAULT_SETTINGS.WALL_OFFSET;
-
-        // Reset temp vector
-        Boid._tempVector.x = 0;
-        Boid._tempVector.y = 0;
-
-        // Check each wall and apply repulsion
-        this._checkWallRepulsion(this.position.x, CANVAS_WIDTH - offset, -1, 0, Boid._tempVector);
-        this._checkWallRepulsion(offset - this.position.x, this.range, 1, 0, Boid._tempVector);
-        this._checkWallRepulsion(this.position.y, CANVAS_HEIGHT - offset, 0, -1, Boid._tempVector);
-        this._checkWallRepulsion(offset - this.position.y, this.range, 0, 1, Boid._tempVector);
-
-        // Apply the accumulated repulsion force
-        if (Boid._tempVector.x !== 0 || Boid._tempVector.y !== 0) {
-            Boid._tempVector.scale(deltaT * DEFAULT_COEFFICIENTS.REPEL);
-            this.velocity.add(Boid._tempVector);
+    rule1(flock) {
+        // If cohesion coefficient is 0, don't apply this rule at all
+        if (this.cohereCoefficient <= 0) {
+            // Still draw visualization if needed (but with zero force)
+            this._drawSteerVector(this.cohereSteerElement, new Vector2D(0, 0), 300, this.showCohere);
+            return new Vector2D(0, 0);
         }
-    }
 
-    _checkWallRepulsion(distance, threshold, dirX, dirY, accumulator) {
-        if (distance > threshold - this.range && distance < threshold) {
-            const distanceFromWall = Math.abs(threshold - distance);
-            const strengthRatio = Math.pow(1 - (distanceFromWall / this.range), 2);
-            accumulator.x += dirX * strengthRatio;
-            accumulator.y += dirY * strengthRatio;
+        const pcJ = new Vector2D(0, 0); // perceived center
+        let count = 0;
+
+        // Calculate center of mass of neighbors within range (excluding this one)
+        for (const boid of this.neighbors) {
+            pcJ.add(boid.position);
+            count++;
         }
-    }
 
-    /**
-     * Simplified super gravity implementation
-     */
-    superGravity(deltaT) {
-        const { CANVAS_HEIGHT, CANVAS_WIDTH } = WORLD;
-        const offset = DEFAULT_SETTINGS.GRAVITY_OFFSET;
+        if (count === 0) {
+            return new Vector2D(0, 0);
+        }
 
-        // Check if boid is near any boundary
-        const nearBoundary = (
-            this.position.x > CANVAS_WIDTH + offset ||
-            this.position.x < -offset ||
-            this.position.y > CANVAS_HEIGHT + offset ||
-            this.position.y < -offset
+        // Get the average position (center of mass)
+        pcJ.scale(1 / count);
+
+        // Move 1% of the way towards the center (as per pseudocode)
+        const cohesionForce = new Vector2D(
+            (pcJ.x - this.position.x) / BOIDS_RULES.COHESION_FACTOR,
+            (pcJ.y - this.position.y) / BOIDS_RULES.COHESION_FACTOR
         );
 
-        if (nearBoundary) {
-            // Calculate direction to center
-            Boid._tempVector.x = CANVAS_WIDTH / 2 - this.position.x;
-            Boid._tempVector.y = CANVAS_HEIGHT / 2 - this.position.y;
+        // Apply user coefficient
+        cohesionForce.scale(this.cohereCoefficient);
 
-            const steer = this.steerTowardsTarget(Boid._tempVector);
-            steer.scale(DEFAULT_COEFFICIENTS.GRAVITY * deltaT);
-            this.velocity.add(steer);
+        // Visualization
+        this._drawSteerVector(this.cohereSteerElement, cohesionForce, 300, this.showCohere);
+
+        return cohesionForce;
+    }
+
+    /**
+     * Rule 2: Boids try to keep a small distance away from other objects
+     * Updated to only affect neighbors within range with distance-based scaling
+     */
+    rule2(flock) {
+        // If separation coefficient is 0, don't apply this rule at all
+        if (this.separationCoefficient <= 0) {
+            // Still draw visualization if needed (but with zero force)
+            this._drawSteerVector(this.separateSteerElement, new Vector2D(0, 0), 100, this.showSeparate);
+            return new Vector2D(0, 0);
         }
+
+        const c = new Vector2D(0, 0);
+
+        for (const boid of this.neighbors) {
+            const distance = this.neighborDistances.get(boid);
+            if (!distance) continue;
+
+            // If within separation distance, move away
+            if (distance < BOIDS_RULES.SEPARATION_DISTANCE && distance > 0) {
+                const displacement = new Vector2D(
+                    boid.position.x - this.position.x,
+                    boid.position.y - this.position.y
+                );
+
+                // Scale displacement by inverse of distance (closer = stronger repulsion)
+                const repulsionStrength = (BOIDS_RULES.SEPARATION_DISTANCE - distance) / BOIDS_RULES.SEPARATION_DISTANCE;
+                displacement.scale(repulsionStrength);
+
+                c.subtract(displacement);
+            }
+        }
+
+        // Apply user coefficient
+        c.scale(this.separationCoefficient);
+
+        // Visualization
+        this._drawSteerVector(this.separateSteerElement, c, 100, this.showSeparate);
+
+        return c;
+    }    /**
+     * Rule 3: Boids try to match velocity with near boids
+     * Updated to only consider neighbors within range
+     */
+    rule3(flock) {
+        // If alignment coefficient is 0, don't apply this rule at all
+        if (this.alignCoefficient <= 0) {
+            // Still draw visualization if needed (but with zero force)
+            this._drawSteerVector(this.alignSteerElement, new Vector2D(0, 0), 500, this.showAlign);
+            return new Vector2D(0, 0);
+        }
+
+        const pvJ = new Vector2D(0, 0); // perceived velocity
+        let count = 0;
+
+        // Calculate average velocity of neighbors within range
+        for (const boid of this.neighbors) {
+            pvJ.add(boid.velocity);
+            count++;
+        }
+
+        if (count === 0) {
+            return new Vector2D(0, 0);
+        }
+
+        // Get the average velocity
+        pvJ.scale(1 / count);
+
+        // Return 1/8 of the difference between average and current velocity
+        const alignmentForce = new Vector2D(
+            (pvJ.x - this.velocity.x) / BOIDS_RULES.ALIGNMENT_FACTOR,
+            (pvJ.y - this.velocity.y) / BOIDS_RULES.ALIGNMENT_FACTOR
+        );
+
+        // Apply user coefficient
+        alignmentForce.scale(this.alignCoefficient);
+
+        // Visualization
+        this._drawSteerVector(this.alignSteerElement, alignmentForce, 500, this.showAlign);
+
+        return alignmentForce;
+    }
+
+    /**
+     * Limiting the speed as described in the pseudocode
+     */
+    limitVelocity() {
+        const vlim = this.maxSpeed;
+        const magnitude = this.velocity.magnitude();
+
+        if (magnitude > vlim) {
+            // Create unit vector and multiply by speed limit
+            this.velocity.scale(vlim / magnitude);
+        }
+
+        // Also ensure minimum speed to keep boids moving
+        if (magnitude < DEFAULT_SETTINGS.MIN_SPEED && magnitude > 0) {
+            this.velocity.scale(DEFAULT_SETTINGS.MIN_SPEED / magnitude);
+        }
+    }
+
+    /**
+     * Bounding the position as described in the pseudocode
+     */
+    boundPosition() {
+        const v = new Vector2D(0, 0);
+        const { CANVAS_WIDTH, CANVAS_HEIGHT } = WORLD;
+        const margin = 20;
+
+        if (this.position.x < margin) {
+            v.x = 10;
+        } else if (this.position.x > CANVAS_WIDTH - margin) {
+            v.x = -10;
+        }
+
+        if (this.position.y < margin) {
+            v.y = 10;
+        } else if (this.position.y > CANVAS_HEIGHT - margin) {
+            v.y = -10;
+        }
+
+        return v;
+    }
+
+    /**
+     * Tendency towards a particular place (center of screen)
+     */
+    tendToPlace() {
+        const { CANVAS_WIDTH, CANVAS_HEIGHT } = WORLD;
+        const center = new Vector2D(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2);
+
+        // Only apply if boid is far from center
+        const distanceFromCenter = distance2D(
+            [this.position.x, this.position.y],
+            [center.x, center.y]
+        );
+
+        if (distanceFromCenter > Math.min(CANVAS_WIDTH, CANVAS_HEIGHT) / 3) {
+            return new Vector2D(
+                (center.x - this.position.x) / 100,
+                (center.y - this.position.y) / 100
+            );
+        }
+
+        return new Vector2D(0, 0);
     }
 
     /**
@@ -272,149 +425,13 @@ class Boid {
     }
 
     /**
-     * Optimized speed control using in-place normalization
-     */
-    speedControl() {
-        const magnitude = this.velocity.magnitude();
-        if (magnitude > 0) {
-            const scale = this.maxSpeed / magnitude;
-            this.velocity.scale(scale);
-        }
-    }
-
-    /**
-     * Optimized neighbor finding with distance caching
-     */
-    findNeighborsWithinRange(flock) {
-        // Clear previous neighbor distances
-        this.neighborDistances.clear();
-
-        for (const otherBoid of flock) {
-            if (otherBoid === this) continue;
-
-            const distance = distance2D(
-                [this.position.x, this.position.y],
-                [otherBoid.position.x, otherBoid.position.y]
-            );
-
-            if (distance <= this.range) {
-                // Cache the distance for later use
-                this.neighborDistances.set(otherBoid, distance);
-
-                if (this._isInFieldOfView(otherBoid)) {
-                    this.neighbors.add(otherBoid);
-                } else {
-                    this.neighbors.delete(otherBoid);
-                }
-            } else {
-                this.neighbors.delete(otherBoid);
-            }
-        }
-
-        return this.neighbors;
-    }
-
-    _isInFieldOfView(otherBoid) {
-        // Calculate vector from this boid to other boid (reuse temp vector)
-        Boid._tempVector.x = otherBoid.position.x - this.position.x;
-        Boid._tempVector.y = otherBoid.position.y - this.position.y;
-
-        const angleBetween = this.velocity.angleBetweenVectors(Boid._tempVector);
-        return angleBetween > -this.leftSideFOV && angleBetween < this.rightSideFOV;
-    }
-
-    /**
-     * Optimized separation with cached distances
-     */
-    separate(deltaT) {
-        if (this.neighbors.size === 0) return;
-
-        // Reset temp vector for accumulation
-        Boid._tempVector.x = 0;
-        Boid._tempVector.y = 0;
-
-        for (const neighbor of this.neighbors) {
-            const distance = this.neighborDistances.get(neighbor);
-            if (!distance) continue;
-
-            // Calculate separation direction (reuse temp vector 2)
-            Boid._tempVector2.x = this.position.x - neighbor.position.x;
-            Boid._tempVector2.y = this.position.y - neighbor.position.y;
-
-            const steer = this.steerTowardsTarget(Boid._tempVector2);
-            const strengthRatio = Math.pow(1 - (distance / this.range), 2);
-            const steerStrength = strengthRatio * this.separationCoefficient;
-
-            steer.scale(steerStrength);
-            Boid._tempVector.add(steer);
-        }
-
-        this._drawSteerVector(this.separateSteerElement, Boid._tempVector, 100, this.showSeparate);
-
-        Boid._tempVector.scale(deltaT);
-        this.velocity.add(Boid._tempVector);
-    }
-
-    /**
-     * Optimized alignment behavior
-     */
-    align(deltaT) {
-        if (this.neighbors.size === 0) return;
-
-        // Calculate average velocity
-        Boid._tempVector.x = 0;
-        Boid._tempVector.y = 0;
-
-        for (const neighbor of this.neighbors) {
-            Boid._tempVector.add(neighbor.velocity);
-        }
-
-        Boid._tempVector.scale(1 / this.neighbors.size);
-        const steer = this.steerTowardsTarget(Boid._tempVector);
-        steer.scale(this.alignCoefficient);
-
-        this._drawSteerVector(this.alignSteerElement, steer, 2000, this.showAlign);
-
-        steer.scale(deltaT);
-        this.velocity.add(steer);
-    }
-
-    /**
-     * Optimized cohesion behavior
-     */
-    cohere(deltaT) {
-        if (this.neighbors.size === 0) return;
-
-        // Calculate center of mass
-        Boid._tempVector.x = 0;
-        Boid._tempVector.y = 0;
-
-        for (const neighbor of this.neighbors) {
-            Boid._tempVector.add(neighbor.position);
-        }
-
-        Boid._tempVector.scale(1 / this.neighbors.size);
-
-        // Calculate direction to center of mass
-        Boid._tempVector2.x = Boid._tempVector.x - this.position.x;
-        Boid._tempVector2.y = Boid._tempVector.y - this.position.y;
-
-        const steer = this.steerTowardsTarget(Boid._tempVector2);
-        steer.scale(this.cohereCoefficient);
-
-        this._drawSteerVector(this.cohereSteerElement, steer, 300, this.showCohere);
-
-        steer.scale(deltaT);
-        this.velocity.add(steer);
-    }
-
-    /**
      * Helper method for drawing steer vectors
      */
     _drawSteerVector(element, vector, scale, shouldDraw) {
         if (!element) return;
 
-        if (!shouldDraw) {
+        // Hide element if not drawing or if vector is zero (no force)
+        if (!shouldDraw || (vector.x === 0 && vector.y === 0)) {
             // Fully hide the element so stale vectors are not visible and it doesn't affect layout
             try {
                 element.style.display = 'none';
@@ -439,23 +456,41 @@ class Boid {
     }
 
     /**
-     * Optimized steer calculation that modifies input vector
+     * Find neighbors for visualization purposes (the core rules use the entire flock)
      */
-    steerTowardsTarget(desiredDirection) {
-        const magnitude = desiredDirection.magnitude();
-        if (magnitude === 0) return new Vector2D(0, 0);
+    findNeighborsWithinRange(flock) {
+        // Clear previous neighbor distances
+        this.neighborDistances.clear();
+        this.neighbors.clear();
 
-        // Normalize in-place for efficiency
-        const scale = this.maxSpeed / magnitude;
-        desiredDirection.scale(scale);
+        for (const otherBoid of flock) {
+            if (otherBoid === this) continue;
 
-        // Calculate steering force
-        const steer = new Vector2D(
-            desiredDirection.x - this.velocity.x,
-            desiredDirection.y - this.velocity.y
-        );
+            const distance = distance2D(
+                [this.position.x, this.position.y],
+                [otherBoid.position.x, otherBoid.position.y]
+            );
 
-        return steer.normalize();
+            if (distance <= this.range) {
+                // Cache the distance for later use
+                this.neighborDistances.set(otherBoid, distance);
+
+                if (this._isInFieldOfView(otherBoid)) {
+                    this.neighbors.add(otherBoid);
+                }
+            }
+        }
+
+        return this.neighbors;
+    }
+
+    _isInFieldOfView(otherBoid) {
+        // Calculate vector from this boid to other boid (reuse temp vector)
+        Boid._tempVector.x = otherBoid.position.x - this.position.x;
+        Boid._tempVector.y = otherBoid.position.y - this.position.y;
+
+        const angleBetween = this.velocity.angleBetweenVectors(Boid._tempVector);
+        return angleBetween > -this.leftSideFOV && angleBetween < this.rightSideFOV;
     }
 
     /**
@@ -496,14 +531,49 @@ class Boid {
     }
 
     /**
-     * Main drawing method with optimized conditional rendering
+     * Main drawing method with trail effects and optimized conditional rendering
      */
     draw() {
+        this._updateTrail();
         this.drawBoid();
+        this._drawTrail();
 
         if (this.highlighted) {
             this.drawNeighbors();
         }
+    }
+
+    /**
+     * Update trail positions
+     */
+    _updateTrail() {
+        // Add current position to trail
+        this.trailPositions.unshift({
+            x: this.position.x,
+            y: this.position.y,
+            angle: this.velocity.angle()
+        });
+
+        // Limit trail length
+        if (this.trailPositions.length > this.maxTrailLength) {
+            this.trailPositions.pop();
+        }
+    }
+
+    /**
+     * Draw the ghost trail effect
+     */
+    _drawTrail() {
+        this.trailPositions.forEach((pos, index) => {
+            if (index > 0 && index < this.trailElements.length) {
+                const trailElement = this.trailElements[index - 1];
+                const opacity = (this.maxTrailLength - index) / this.maxTrailLength * 0.6;
+                const scale = (this.maxTrailLength - index) / this.maxTrailLength * 0.8 + 0.2;
+
+                trailElement.style.opacity = opacity;
+                trailElement.style.transform = `translate(${pos.x}px, ${pos.y}px) rotateZ(${pos.angle}rad) scale(${scale})`;
+            }
+        });
     }
 
     /**

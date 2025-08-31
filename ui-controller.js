@@ -210,7 +210,21 @@ class UIController {
         });
     }
 
+    initializeParameterValues() {
+        // Set default display values to match the HTML defaults
+        const separationValue = document.getElementById('separation-value');
+        const cohereValue = document.getElementById('cohere-value');
+        const alignValue = document.getElementById('align-value');
+
+        if (separationValue) separationValue.textContent = '100%';
+        if (cohereValue) cohereValue.textContent = '100%';
+        if (alignValue) alignValue.textContent = '100%';
+    }
+
     setupParameterControls() {
+        // Initialize default values
+        this.initializeParameterValues();
+
         // Field of View Range
         const fovRange = document.getElementById('fov-range');
         const fovValue = document.getElementById('fov-value');
@@ -232,9 +246,10 @@ class UIController {
 
         separationRange?.addEventListener('input', (e) => {
             const value = e.target.value;
-            separationValue.textContent = value;
+            separationValue.textContent = value + '%';
 
-            const coefficient = 1e-2 * parseInt(value);
+            // Scale from 0-200 slider to 0-2.0 coefficient range (100% = 1.0)
+            const coefficient = parseFloat(value) / 100;
             flock.forEach(boid => {
                 boid.separationCoefficient = coefficient;
             });
@@ -246,9 +261,10 @@ class UIController {
 
         cohereRange?.addEventListener('input', (e) => {
             const value = e.target.value;
-            cohereValue.textContent = value;
+            cohereValue.textContent = value + '%';
 
-            const coefficient = 1e-2 * parseInt(value);
+            // Scale from 0-200 slider to 0-2.0 coefficient range (100% = 1.0)
+            const coefficient = parseFloat(value) / 100;
             flock.forEach(boid => {
                 boid.cohereCoefficient = coefficient;
             });
@@ -260,9 +276,10 @@ class UIController {
 
         alignRange?.addEventListener('input', (e) => {
             const value = e.target.value;
-            alignValue.textContent = value;
+            alignValue.textContent = value + '%';
 
-            const coefficient = 1e-3 * parseInt(value);
+            // Scale from 0-200 slider to 0-2.0 coefficient range (100% = 1.0)
+            const coefficient = parseFloat(value) / 100;
             flock.forEach(boid => {
                 boid.alignCoefficient = coefficient;
             });
@@ -428,7 +445,9 @@ class UIController {
 
         // Draw based on selected algorithm
         this.drawDemoBoids(algorithm);
-    } drawDemoBoids(algorithm) {
+    }
+
+    drawDemoBoids(algorithm) {
         this.demoCtx.save();
 
         // Update demo boid positions

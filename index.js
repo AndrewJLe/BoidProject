@@ -26,16 +26,17 @@ function init() {
         const boid = new Boid({ id: i, isHighlighted });
 
         // Use modern color palette
-        boid.boidElement.style.borderLeftColor = pickOneTetradic(
+        const color = pickOneTetradic(
             "#3b82f6", "#106db9ff", "#0bf5f5ff", "#44b9efff"
         );
+        boid.setColor(color);
 
         appendFlock(boid);
     }
 
     // Style the main boid
     if (flock[0]) {
-        flock[0].boidElement.style.borderLeftColor = "#ffffff";
+        flock[0].setColor("#ffffff");
         flock[0].boidElement.style.filter = "drop-shadow(0 0 4px rgba(255,255,255,0.8))";
     }
 
