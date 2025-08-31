@@ -43,6 +43,7 @@
   --alignment-color: #f59e0b;
   --neighbor-color: #ef4444;
   --fov-color: #6366f1;
+  --ghost-trail-color: #8b5cf6;
 }
 
 body {
@@ -373,6 +374,10 @@ body {
 
 .toggle-switch:checked+.fov-color {
   background: var(--fov-color);
+}
+
+.toggle-switch:checked+.ghost-trail-color {
+  background: var(--ghost-trail-color);
 }
 
 /* Sliders */

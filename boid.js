@@ -25,6 +25,8 @@ class Boid {
     static _tempVector = new Vector2D(0, 0);
     static _tempVector2 = new Vector2D(0, 0);
     static _tempVector3 = new Vector2D(0, 0);
+    // Global toggle for ghost trails - defaults to false for better performance
+    static ghostTrailEnabled = false;
 
     constructor({ id, isHighlighted }) {
         this.id = id;
@@ -103,6 +105,10 @@ class Boid {
             const trailElement = document.createElement("div");
             trailElement.classList.add("boid-trail");
             trailElement.style.opacity = "0";
+            // Respect the global ghost trail flag when inserting elements
+            if (!Boid.ghostTrailEnabled) {
+                trailElement.style.display = 'none';
+            }
             document.getElementById("canvas").appendChild(trailElement);
             this.trailElements.push(trailElement);
         }
@@ -116,6 +122,46 @@ class Boid {
         this.trailElements.forEach(trail => {
             trail.style.borderLeftColor = color;
         });
+    }
+
+    /**
+     * Set the trail length dynamically
+     */
+    setTrailLength(newLength) {
+        const oldLength = this.maxTrailLength;
+        this.maxTrailLength = Math.max(3, Math.min(25, newLength)); // Clamp between 3 and 25
+
+        // If increasing trail length, create new trail elements
+        if (this.maxTrailLength > oldLength) {
+            for (let i = oldLength; i < this.maxTrailLength; i++) {
+                const trailElement = document.createElement("div");
+                trailElement.classList.add("boid-trail");
+                trailElement.style.opacity = "0";
+                if (!Boid.ghostTrailEnabled) {
+                    trailElement.style.display = 'none';
+                }
+                // Set the same color as existing trail elements
+                if (this.trailElements.length > 0) {
+                    trailElement.style.borderLeftColor = this.trailElements[0].style.borderLeftColor;
+                }
+                document.getElementById("canvas").appendChild(trailElement);
+                this.trailElements.push(trailElement);
+            }
+        }
+        // If decreasing trail length, remove excess elements
+        else if (this.maxTrailLength < oldLength) {
+            for (let i = oldLength - 1; i >= this.maxTrailLength; i--) {
+                if (this.trailElements[i]) {
+                    this.trailElements[i].remove();
+                    this.trailElements.pop();
+                }
+            }
+        }
+
+        // Trim trail positions to match new length
+        if (this.trailPositions.length > this.maxTrailLength) {
+            this.trailPositions = this.trailPositions.slice(0, this.maxTrailLength);
+        }
     }
 
     _createSteerElements() {
@@ -534,9 +580,25 @@ class Boid {
      * Main drawing method with trail effects and optimized conditional rendering
      */
     draw() {
-        this._updateTrail();
+        // Only update and draw trails when the global flag is enabled.
+        if (Boid.ghostTrailEnabled) {
+            this._updateTrail();
+            this._drawTrail();
+        } else {
+            // If trails are disabled, ensure all trail elements are hidden to avoid stale visuals
+            try {
+                this.trailElements.forEach(el => {
+                    if (el) {
+                        el.style.opacity = '0';
+                        el.style.display = 'none';
+                    }
+                });
+            } catch (e) {
+                // ignore DOM write errors
+            }
+        }
+
         this.drawBoid();
-        this._drawTrail();
 
         if (this.highlighted) {
             this.drawNeighbors();

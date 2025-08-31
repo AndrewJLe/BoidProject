@@ -46,6 +46,17 @@ class UIController {
             if (el) el.checked = !!first[prop];
         });
 
+        // Sync ghost trail toggle with Boid static flag
+        const ghostTrailSwitch = document.getElementById('ghost-trail-switch');
+        if (ghostTrailSwitch) {
+            import('./boid.js').then(module => {
+                const { Boid } = module;
+                ghostTrailSwitch.checked = Boid.ghostTrailEnabled;
+            }).catch(err => {
+                console.warn('Failed to sync ghost trail state:', err);
+            });
+        }
+
         // Ensure FOV visual matches
         if (first.updateFOVDisplay) {
             first.updateFOVDisplay();
@@ -168,6 +179,36 @@ class UIController {
                         flock[0].alignSteerElement.style.display = 'block';
                     }
                 }
+            });
+        }
+
+        // Ghost Trail Toggle
+        const ghostTrailSwitch = document.getElementById('ghost-trail-switch');
+        if (ghostTrailSwitch) {
+            // Import Boid class to access static flag
+            import('./boid.js').then(module => {
+                const { Boid } = module;
+                
+                // Sync initial state
+                ghostTrailSwitch.checked = Boid.ghostTrailEnabled;
+
+                ghostTrailSwitch.addEventListener('change', (e) => {
+                    Boid.ghostTrailEnabled = e.target.checked;
+                    
+                    // Update all existing boids immediately
+                    flock.forEach(boid => {
+                        if (boid.trailElements) {
+                            boid.trailElements.forEach(el => {
+                                if (el) {
+                                    el.style.display = e.target.checked ? 'block' : 'none';
+                                    if (!e.target.checked) el.style.opacity = '0';
+                                }
+                            });
+                        }
+                    });
+                });
+            }).catch(err => {
+                console.warn('Failed to import Boid class for ghost trail toggle:', err);
             });
         }
 
@@ -295,6 +336,21 @@ class UIController {
 
             flock.forEach(boid => {
                 boid.maxSpeed = value;
+            });
+        });
+
+        // Trail Length Range
+        const trailLengthRange = document.getElementById('trail-length-range');
+        const trailLengthValue = document.getElementById('trail-length-value');
+
+        trailLengthRange?.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            trailLengthValue.textContent = value;
+
+            flock.forEach(boid => {
+                if (boid.setTrailLength) {
+                    boid.setTrailLength(value);
+                }
             });
         });
     }
