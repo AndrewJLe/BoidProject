@@ -36,8 +36,8 @@ function init() {
 
     // Style the main boid
     if (flock[0]) {
-        flock[0].setColor("#ffffff");
-        flock[0].boidElement.style.filter = "drop-shadow(0 0 4px rgba(255,255,255,0.8))";
+        flock[0].setColor("#000000ff");
+        flock[0].boidElement.style.filter = "drop-shadow(0 0 4px rgba(29, 29, 29, 0.8))";
     }
 
     // Dispatch event to notify UI that boids are ready

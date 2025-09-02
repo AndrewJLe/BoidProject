@@ -141,18 +141,7 @@
                                 </div>
                             </div>
 
-                            <!-- Simulation Controls -->
-                            <div class="control-section">
-                                <h3>Simulation</h3>
-                                <div class="button-grid">
-                                    <button class="control-btn primary" id="reset-btn">
-                                        <i class="fas fa-refresh"></i> Reset
-                                    </button>
-                                    <button class="control-btn secondary" id="pause-btn">
-                                        <i class="fas fa-pause"></i> Pause
-                                    </button>
-                                </div>
-                            </div>
+                            <!-- Simulation Controls: moved to canvas toolbar to save vertical space -->
                         </div>
                     </div>
 
@@ -194,6 +183,15 @@
             <!-- Bottom Canvas Section (3/5 of screen) -->
             <div class="canvas-section">
                 <div class="canvas-wrapper">
+                    <!-- Canvas toolbar: moved simulation controls here for compact access -->
+                    <div class="canvas-toolbar" aria-label="Simulation Controls">
+                        <button class="control-btn primary compact" id="reset-btn">
+                            <i class="fas fa-refresh"></i>
+                        </button>
+                        <button class="control-btn secondary compact" id="pause-btn">
+                            <i class="fas fa-pause"></i>
+                        </button>
+                    </div>
                     <div class="canvas-container" id="canvas-container">
                         <!-- Main boids canvas will be inserted here -->
                     </div>

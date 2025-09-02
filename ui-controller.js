@@ -730,10 +730,10 @@ class UIController {
         const icon = pauseBtn?.querySelector('i');
 
         if (this.isPaused) {
-            pauseBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+            pauseBtn.innerHTML = '<i class="fas fa-play"></i>';
             // Pause logic would be handled in the main game loop
         } else {
-            pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
+            pauseBtn.innerHTML = '<i class="fas fa-pause"></i>';
         }
 
         // Dispatch custom event for main app to handle
