@@ -754,6 +754,13 @@ body {
   z-index: 2;
 }
 
+.boids {
+  /* Rotate around the triangle's tip (left center) so translate(x,y)
+     positions the tip at the boid position and rotation keeps the tip
+     stationary. */
+  transform-origin: 0 50%;
+}
+
 .boids::after {
   position: absolute;
   top: 0;
@@ -782,10 +789,17 @@ body {
 /* FOV and lines */
 .FOV {
   position: absolute;
-  transform: translate(-54%, -50%) rotate(230deg);
+  /* SVG will be positioned so its center aligns with the boid element origin
+     via inline styles set when creating the SVG. No hard-coded transform here. */
+  pointer-events: none;
 }
 
 .blindspot {
+  position: relative;
+  transform-origin: center;
+}
+
+.fov-sector {
   position: relative;
   transform-origin: center;
 }

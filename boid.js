@@ -2,10 +2,8 @@ import { WORLD } from "./world.js";
 import { distance2D } from "./utils.js";
 import { Vector2D } from "./vector.js";
 
-// Constants for the Boids algorithm following the original pseudocode
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
-// Rule coefficients following the original algorithm but with adjustments for smoother behavior
 const BOIDS_RULES = {
     COHESION_FACTOR: 500,
     SEPARATION_DISTANCE: 15,
@@ -13,19 +11,17 @@ const BOIDS_RULES = {
 };
 
 const DEFAULT_SETTINGS = {
-    MAX_SPEED: 4.0,           // Speed limit as described in pseudocode
-    MIN_SPEED: 3.0,           // Minimum speed to keep moving
-    RANGE: 150,               // Neighbor detection range
+    MAX_SPEED: 4.0,
+    MIN_SPEED: 3.0,
+    RANGE: 150,
     FOV_ANGLE: 180 * DEGREES_TO_RADIANS,
 };
 
 // Boid object
 class Boid {
-    // Pre-allocate vectors to avoid garbage collection
     static _tempVector = new Vector2D(0, 0);
     static _tempVector2 = new Vector2D(0, 0);
     static _tempVector3 = new Vector2D(0, 0);
-    // Global toggle for ghost trails - defaults to false for better performance
     static ghostTrailEnabled = false;
 
     constructor({ id, isHighlighted }) {
@@ -73,8 +69,16 @@ class Boid {
     }
 
     _initializeVelocity() {
-        const velocity = new Vector2D(Math.random() * 10 - 5, Math.random() * 10 - 5);
-        velocity.scale(this.maxSpeed);
+        // Start all boids facing right (positive x direction) for consistent FOV behavior
+        // Add a small random component to prevent all boids from moving in perfect lockstep
+        const baseSpeed = this.maxSpeed * 0.8; // Use 80% of max speed as base
+        const randomVariation = this.maxSpeed * 0.4; // Allow 40% variation
+
+        const velocity = new Vector2D(
+            baseSpeed + (Math.random() - 0.5) * randomVariation, // Mostly rightward with some variation
+            (Math.random() - 0.5) * randomVariation * 0.5 // Small vertical component
+        );
+
         return velocity;
     }
 
@@ -83,10 +87,8 @@ class Boid {
 
         if (isHighlighted) {
             this._createSteerElements();
-            // Only create FOV elements if FOV is enabled
-            if (this.FOVEnabled) {
-                this._createFOVElements();
-            }
+            // Always create FOV elements for highlighted boids so they can be toggled
+            this._createFOVElements();
         }
     }
 
@@ -161,6 +163,26 @@ class Boid {
         // Trim trail positions to match new length
         if (this.trailPositions.length > this.maxTrailLength) {
             this.trailPositions = this.trailPositions.slice(0, this.maxTrailLength);
+        }
+    }
+
+    /**
+     * Set the FOV angle dynamically
+     */
+    setFOVAngle(angleInRadians) {
+        // Clamp between 0 and 2π radians (0° to 360°)
+        this.leftSideFOV = Math.max(0, Math.min(Math.PI * 2, angleInRadians)) / 2;
+        this.rightSideFOV = this.leftSideFOV;
+
+        // Debug: Log the FOV angle being set
+        if (this.id === 0) { // Only log for the first boid to avoid spam
+            console.log(`Boid ${this.id}: Setting FOV to ${(angleInRadians * 180 / Math.PI).toFixed(1)}° (${this.leftSideFOV.toFixed(3)} + ${this.rightSideFOV.toFixed(3)} rad)`);
+        }
+
+        // Update FOV visualization if it exists and is enabled
+        if (this.FOVEnabled && this.BlindSpotElement) {
+            const totalFOVAngle = this.leftSideFOV + this.rightSideFOV;
+            this._setFOVSectorAttributes(this.BlindSpotElement, this.range, totalFOVAngle);
         }
     }
 
@@ -409,26 +431,33 @@ class Boid {
                 this._createFOVElements();
             }
             if (this.BlindSpotElement) {
-                this.BlindSpotElement.setAttribute('stroke-opacity', '0.3');
+                // Update the sector to show current FOV angle and ensure proper rotation
+                const totalFOVAngle = this.leftSideFOV + this.rightSideFOV;
+                this._setFOVSectorAttributes(this.BlindSpotElement, this.range, totalFOVAngle);
+
+                // Make it visible
+                this.BlindSpotElement.setAttribute('fill-opacity', '0.2');
+                this.BlindSpotElement.setAttribute('stroke-opacity', '0.4');
             }
         } else {
             if (this.BlindSpotElement) {
+                this.BlindSpotElement.setAttribute('fill-opacity', '0');
                 this.BlindSpotElement.setAttribute('stroke-opacity', '0');
             }
         }
     }
 
     _createFOVElements() {
-        const circumference = Math.PI * this.range;
-        const viewPercentage = ((2 * this.leftSideFOV / DEGREES_TO_RADIANS) / 360) * 100;
+        // Calculate view percentage based on current FOV angle
+        const totalFOVAngle = this.leftSideFOV + this.rightSideFOV;
 
         // Create SVG container
         this.SVGElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         this._setSVGAttributes(this.SVGElement, this.range * 2);
 
-        // Create blindspot circle
-        this.BlindSpotElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        this._setBlindSpotAttributes(this.BlindSpotElement, this.range, circumference, viewPercentage);
+        // Create FOV sector path instead of circle
+        this.BlindSpotElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        this._setFOVSectorAttributes(this.BlindSpotElement, this.range, totalFOVAngle);
 
         this.SVGElement.appendChild(this.BlindSpotElement);
         this.boidElement.appendChild(this.SVGElement);
@@ -437,11 +466,22 @@ class Boid {
     _setSVGAttributes(svg, size) {
         svg.setAttribute("height", size);
         svg.setAttribute("width", size);
+        // Position the svg so that its center is at the boid element origin (0,0)
+        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.style.position = 'absolute';
+        svg.style.left = `${-size / 2}px`;
+        svg.style.top = `${-size / 2}px`;
         svg.classList.add("FOV");
     }
 
     _setBlindSpotAttributes(circle, range, circumference, viewPercentage) {
         const radius = range / 2;
+
+        // Calculate the dash array for the FOV visualization
+        // For FOV visualization, we want to show the blind spot (the area the boid can't see)
+        const visibleArc = viewPercentage * circumference / 100;
+        const blindArc = circumference - visibleArc;
+
         const attributes = {
             "height": range * 2,
             "width": range * 2,
@@ -449,10 +489,11 @@ class Boid {
             "cy": range,
             "r": radius,
             "fill": "none",
-            "stroke": "grey",
-            "stroke-opacity": this.FOVEnabled ? "0.3" : "0",
-            "stroke-width": range,
-            "stroke-dasharray": `${viewPercentage * circumference / 100} ${circumference}`
+            "stroke": "#ff6b6b", // Changed to a more visible red color
+            "stroke-opacity": this.FOVEnabled ? "0.4" : "0", // Increased opacity
+            "stroke-width": "3", // Made stroke thinner and more visible
+            // Show the blind spot as dashed line - if FOV is 180°, show the back half as blind spot
+            "stroke-dasharray": blindArc > 0 ? `${visibleArc} ${blindArc}` : "none"
         };
 
         Object.entries(attributes).forEach(([key, value]) => {
@@ -460,6 +501,72 @@ class Boid {
         });
 
         circle.classList.add("blindspot");
+    }
+
+    /**
+     * Create FOV sector path attributes - shows the visible area as a filled sector
+     */
+    _setFOVSectorAttributes(path, range, totalFOVAngle) {
+        const centerX = range;
+        const centerY = range;
+        const radius = range / 2;
+
+        // Important: do NOT apply the boid's facing angle here.
+        // The parent `boidElement` is rotated via CSS using the same
+        // `this.velocity.angle()` value in `drawBoid()`.
+        // If we also rotate the path by the facing angle we get a
+        // double-rotation which makes the FOV face wander or flip
+        // when boids collide. Instead compute the sector relative to
+        // the boid's local forward (0 radians = to the right), and
+        // let the containing element's CSS rotation orient it.
+
+        const halfFOV = totalFOVAngle / 2;
+        // Define sector centered on local 0 radians (rightward) so
+        // the boidElement's rotation aligns the sector with the real
+        // facing direction.
+        const svgStartAngle = -halfFOV;
+        const svgEndAngle = halfFOV;
+
+        // Calculate start and end points on the circle
+        const x1 = centerX + radius * Math.cos(svgStartAngle);
+        const y1 = centerY + radius * Math.sin(svgStartAngle);
+        const x2 = centerX + radius * Math.cos(svgEndAngle);
+        const y2 = centerY + radius * Math.sin(svgEndAngle);
+
+        // Determine if we need a large arc (for angles > 180°)
+        const largeArcFlag = totalFOVAngle > Math.PI ? 1 : 0;
+
+        let pathData;
+        if (totalFOVAngle >= Math.PI * 2) {
+            // Full circle - draw using two arcs starting at leftmost point so
+            // the path is well-centered and doesn't rely on floating-point
+            // offsets that can shift the bounding box.
+            const startX = centerX - radius;
+            const startY = centerY;
+            // two arcs that complete the circle
+            pathData = `M ${startX} ${startY} a ${radius} ${radius} 0 1 0 ${radius * 2} 0 a ${radius} ${radius} 0 1 0 -${radius * 2} 0 Z`;
+        } else if (totalFOVAngle > 0) {
+            // Arc sector
+            pathData = `M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+        } else {
+            // No FOV
+            pathData = `M ${centerX} ${centerY}`;
+        }
+
+        const attributes = {
+            "d": pathData,
+            "fill": "#4ade80", // Green color for visible area
+            "fill-opacity": this.FOVEnabled ? "0.2" : "0",
+            "stroke": "#22c55e",
+            "stroke-width": "2",
+            "stroke-opacity": this.FOVEnabled ? "0.4" : "0"
+        };
+
+        Object.entries(attributes).forEach(([key, value]) => {
+            path.setAttribute(key, value);
+        });
+
+        path.classList.add("fov-sector");
     }
 
     _removeFOVElements() {
@@ -599,6 +706,12 @@ class Boid {
         }
 
         this.drawBoid();
+
+        // Update FOV rotation to match boid's current facing direction
+        if (this.FOVEnabled && this.BlindSpotElement) {
+            const totalFOVAngle = this.leftSideFOV + this.rightSideFOV;
+            this._setFOVSectorAttributes(this.BlindSpotElement, this.range, totalFOVAngle);
+        }
 
         if (this.highlighted) {
             this.drawNeighbors();

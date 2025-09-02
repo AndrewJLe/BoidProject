@@ -33,6 +33,9 @@ class UIController {
         const first = flock[0];
         if (!first) return;
 
+        // Initialize FOV angles for all boids with the current slider value
+        this.initializeFOVAngles();
+
         const mappings = [
             ['fov-switch', 'FOVEnabled'],
             ['neighbor-switch', 'showNeighbors'],
@@ -188,13 +191,13 @@ class UIController {
             // Import Boid class to access static flag
             import('./boid.js').then(module => {
                 const { Boid } = module;
-                
+
                 // Sync initial state
                 ghostTrailSwitch.checked = Boid.ghostTrailEnabled;
 
                 ghostTrailSwitch.addEventListener('change', (e) => {
                     Boid.ghostTrailEnabled = e.target.checked;
-                    
+
                     // Update all existing boids immediately
                     flock.forEach(boid => {
                         if (boid.trailElements) {
@@ -260,6 +263,22 @@ class UIController {
         if (separationValue) separationValue.textContent = '100%';
         if (cohereValue) cohereValue.textContent = '100%';
         if (alignValue) alignValue.textContent = '100%';
+
+        // Initialize FOV angle for all boids when they're ready
+        this.initializeFOVAngles();
+    }
+
+    initializeFOVAngles() {
+        // Get the initial FOV angle value from the slider (default is 180°)
+        const fovAngleRange = document.getElementById('fov-angle-range');
+        if (fovAngleRange && window.flock && window.flock.length > 0) {
+            const initialAngle = parseInt(fovAngleRange.value);
+            const angleInRadians = (initialAngle * Math.PI) / 180;
+
+            window.flock.forEach(boid => {
+                boid.setFOVAngle(angleInRadians);
+            });
+        }
     }
 
     setupParameterControls() {
@@ -276,6 +295,24 @@ class UIController {
 
             flock.forEach(boid => {
                 boid.range = parseInt(value);
+            });
+
+            this.updateFOVDisplay();
+        });
+
+        // FOV Angle Range
+        const fovAngleRange = document.getElementById('fov-angle-range');
+        const fovAngleValue = document.getElementById('fov-angle-value');
+
+        fovAngleRange?.addEventListener('input', (e) => {
+            const value = parseInt(e.target.value);
+            fovAngleValue.textContent = value + '°';
+
+            // Convert degrees to radians for boid calculations
+            const angleInRadians = (value * Math.PI) / 180;
+
+            flock.forEach(boid => {
+                boid.setFOVAngle(angleInRadians);
             });
 
             this.updateFOVDisplay();
@@ -358,19 +395,24 @@ class UIController {
     updateFOVDisplay() {
         if (flock[0] && flock[0].SVGElement && flock[0].BlindSpotElement) {
             const range = flock[0].range;
-            const circumference = Math.PI * range;
-            const viewPercentage = ((2 * flock[0].leftSideFOV / (Math.PI / 180)) / 360) * 100;
 
-            flock[0].SVGElement.setAttribute('height', range * 2);
-            flock[0].SVGElement.setAttribute('width', range * 2);
-            flock[0].BlindSpotElement.setAttribute('height', range * 2);
-            flock[0].BlindSpotElement.setAttribute('width', range * 2);
-            flock[0].BlindSpotElement.setAttribute('cx', range);
-            flock[0].BlindSpotElement.setAttribute('cy', range);
-            flock[0].BlindSpotElement.setAttribute('r', range / 2);
-            flock[0].BlindSpotElement.setAttribute('stroke-width', range);
-            flock[0].BlindSpotElement.setAttribute('stroke-dasharray',
-                `${viewPercentage * circumference / 100} ${circumference}`);
+            // Update SVG container size
+            const size = range * 2;
+            flock[0].SVGElement.setAttribute('height', size);
+            flock[0].SVGElement.setAttribute('width', size);
+            // Keep viewBox and positioning in sync so the SVG remains centered on the boid
+            flock[0].SVGElement.setAttribute('viewBox', `0 0 ${size} ${size}`);
+            // Position SVG so its center remains at the boid origin (left/top negative half size)
+            try {
+                flock[0].SVGElement.style.left = `${-size / 2}px`;
+                flock[0].SVGElement.style.top = `${-size / 2}px`;
+            } catch (e) {
+                // ignore if style isn't available
+            }
+
+            // Update the FOV sector
+            const totalFOVAngle = flock[0].leftSideFOV + flock[0].rightSideFOV;
+            flock[0]._setFOVSectorAttributes(flock[0].BlindSpotElement, range, totalFOVAngle);
         }
     }
 
