@@ -46,33 +46,45 @@
                                 <div class="toggle-grid">
                                     <div class="toggle-item">
                                         <label for="fov-switch">Field of View</label>
-                                        <input type="checkbox" id="fov-switch" class="toggle-switch">
+                                        <input type="checkbox" id="fov-switch" class="toggle-switch"
+                                            title="Toggle FOV visualization">
                                         <span class="toggle-slider fov-color"></span>
                                     </div>
                                     <div class="toggle-item">
                                         <label for="neighbor-switch">Neighbor Lines</label>
-                                        <input type="checkbox" id="neighbor-switch" class="toggle-switch">
+                                        <input type="checkbox" id="neighbor-switch" class="toggle-switch"
+                                            title="Show neighbor connection lines">
                                         <span class="toggle-slider neighbor-color"></span>
                                     </div>
                                     <div class="toggle-item">
                                         <label for="separate-switch">Separation</label>
-                                        <input type="checkbox" id="separate-switch" class="toggle-switch">
+                                        <input type="checkbox" id="separate-switch" class="toggle-switch"
+                                            title="Show separation force vectors">
                                         <span class="toggle-slider separation-color"></span>
                                     </div>
                                     <div class="toggle-item">
                                         <label for="cohere-switch">Cohesion</label>
-                                        <input type="checkbox" id="cohere-switch" class="toggle-switch">
+                                        <input type="checkbox" id="cohere-switch" class="toggle-switch"
+                                            title="Show cohesion force vectors">
                                         <span class="toggle-slider cohesion-color"></span>
                                     </div>
                                     <div class="toggle-item">
                                         <label for="align-switch">Alignment</label>
-                                        <input type="checkbox" id="align-switch" class="toggle-switch">
+                                        <input type="checkbox" id="align-switch" class="toggle-switch"
+                                            title="Show alignment force vectors">
                                         <span class="toggle-slider alignment-color"></span>
                                     </div>
                                     <div class="toggle-item">
                                         <label for="ghost-trail-switch">Ghost Trail</label>
-                                        <input type="checkbox" id="ghost-trail-switch" class="toggle-switch">
+                                        <input type="checkbox" id="ghost-trail-switch" class="toggle-switch"
+                                            title="Enable ghost trail effect for boids">
                                         <span class="toggle-slider ghost-trail-color"></span>
+                                    </div>
+                                    <div class="toggle-item">
+                                        <label for="variation-switch">Rule Variation</label>
+                                        <input type="checkbox" id="variation-switch" class="toggle-switch" checked
+                                            title="Enable/disable rule strength variation waves">
+                                        <span class="toggle-slider variation-color"></span>
                                     </div>
                                 </div>
                             </div>
@@ -87,15 +99,16 @@
                                             <span class="value" id="fov-value">150</span>
                                         </label>
                                         <input type="range" id="fov-range" class="range-slider fov-range" min="50"
-                                            max="600" value="150">
+                                            max="600" value="150" title="Adjust field of view range (pixels)">
                                     </div>
                                     <div class="slider-item">
                                         <label for="fov-angle-range">
                                             FOV Angle
-                                            <span class="value" id="fov-angle-value">180°</span>
+                                            <span class="value" id="fov-angle-value">250°</span>
                                         </label>
                                         <input type="range" id="fov-angle-range" class="range-slider fov-angle-range"
-                                            min="0" max="360" value="180" step="5">
+                                            min="0" max="360" value="250" step="5"
+                                            title="Adjust field of view angle (degrees)">
                                     </div>
                                     <div class="slider-item">
                                         <label for="separation-range">
@@ -103,7 +116,7 @@
                                             <span class="value" id="separation-value">100%</span>
                                         </label>
                                         <input type="range" id="separation-range" class="range-slider separation-range"
-                                            min="0" max="200" value="100">
+                                            min="0" max="200" value="100" title="Adjust separation force percentage">
                                     </div>
                                     <div class="slider-item">
                                         <label for="cohere-range">
@@ -111,7 +124,7 @@
                                             <span class="value" id="cohere-value">100%</span>
                                         </label>
                                         <input type="range" id="cohere-range" class="range-slider cohere-range" min="0"
-                                            max="200" value="100">
+                                            max="200" value="100" title="Adjust cohesion force percentage">
                                     </div>
                                     <div class="slider-item">
                                         <label for="align-range">
@@ -119,7 +132,7 @@
                                             <span class="value" id="align-value">100%</span>
                                         </label>
                                         <input type="range" id="align-range" class="range-slider align-range" min="0"
-                                            max="200" value="100">
+                                            max="200" value="100" title="Adjust alignment force percentage">
                                     </div>
                                     <div class="slider-item">
                                         <label for="speed-range">
@@ -127,7 +140,7 @@
                                             <span class="value" id="speed-value">3</span>
                                         </label>
                                         <input type="range" id="speed-range" class="range-slider speed-range" min="1"
-                                            max="10" value="3" step="0.1">
+                                            max="10" value="3" step="0.1" title="Adjust maximum boid speed">
                                     </div>
                                     <div class="slider-item">
                                         <label for="trail-length-range">
@@ -135,8 +148,27 @@
                                             <span class="value" id="trail-length-value">12</span>
                                         </label>
                                         <input type="range" id="trail-length-range"
-                                            class="range-slider trail-length-range" min="3" max="25" value="12"
-                                            step="1">
+                                            class="range-slider trail-length-range" min="3" max="25" value="12" step="1"
+                                            title="Adjust trail length for ghost effect">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="variation-frequency-range">
+                                            Variation Frequency
+                                            <span class="value" id="variation-frequency-value">0.6</span>
+                                        </label>
+                                        <input type="range" id="variation-frequency-range"
+                                            class="range-slider variation-frequency-range" min="0.1" max="3" value="0.6"
+                                            step="0.1" title="Adjust variation wave frequency (cycles/sec)">
+                                    </div>
+                                    <div class="slider-item">
+                                        <label for="variation-amplitude-range">
+                                            Variation Amplitude
+                                            <span class="value" id="variation-amplitude-value">1.0</span>
+                                        </label>
+                                        <input type="range" id="variation-amplitude-range"
+                                            class="range-slider variation-amplitude-range" min="0" max="1" value="1"
+                                            step="0.01"
+                                            title="Adjust variation amplitude (0 = no variation, 1 = full 0%-100%)">
                                     </div>
                                 </div>
                             </div>
@@ -172,7 +204,15 @@
                             <!-- Demo Canvas -->
                             <div class="demo-section">
                                 <div class="demo-canvas-container">
-                                    <canvas id="demo-canvas" width="400" height="280"></canvas>
+                                    <div class="demo-controls">
+                                        <button class="control-btn compact" id="demo-reset-btn" title="Reset Demo">
+                                            <i class="fas fa-refresh"></i>
+                                        </button>
+                                        <button class="control-btn compact" id="demo-pause-btn" title="Pause Demo">
+                                            <i class="fas fa-pause"></i>
+                                        </button>
+                                    </div>
+                                    <canvas id="demo-canvas" width="550" height="350"></canvas>
                                 </div>
                             </div>
                         </div>

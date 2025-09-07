@@ -1,182 +1,115 @@
-# 🐦 Boids Flocking Simulation
+# Boids Flocking Simulation
 
-A modern, interactive implementation of Craig Reynolds' classic boids flocking algorithm with real-time parameter controls and algorithm visualization.
+A modern, interactive implementation of Craig Reynolds' boids flocking algorithm with real-time parameter controls and visualizations.
 
-## ✨ Features
+Live preview: https://andrewjle.github.io/BoidProject/
 
-### 🎮 Interactive Controls
-- **Real-time parameter adjustment** with smooth sliders
-- **Visualization toggles** for FOV, neighbor lines, and steering forces
-- **Simulation controls** for pause/resume and reset
-- **Modern UI** with clean, responsive design
+## Overview
 
-### 🧠 Algorithm Showcase
-- **Interactive demos** for each flocking behavior
-- **Real-time explanations** of separation, cohesion, and alignment
-- **Visual demonstrations** showing how each algorithm works
-- **Mini-canvas** with slow-motion algorithm visualization
+Boids simulates emergent group behaviors (birds, fish, swarms) using three simple local rules: separation, cohesion, and alignment. This project adds interactive visualization, per-rule live tuning, demo canvases for each algorithm, and additional usability features such as ghost trails and field-of-view controls.
 
-### 🔧 Performance Optimizations
-- **Memory-efficient** vector operations with object reuse
-- **Distance caching** to eliminate redundant calculations
-- **Optimized DOM manipulation** for smooth 60fps performance
-- **Smart neighbor detection** with field-of-view constraints
+## Features
 
-## 🚀 Getting Started
+- Real-time parameter adjustment with sliders
+- Visualization toggles for FOV, neighbor lines, steering forces, and ghost trails
+- Live tuning of rule variation (frequency and amplitude)
+- Algorithm Showcase: separate demo boids for Separation, Cohesion, and Alignment
+- Compact, responsive UI with canvas toolbar (pause/reset)
+- Performance optimizations for smooth 60fps animation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/AndrewJLe/BoidProject.git
-   cd BoidProject
-   ```
 
-2. **Open in browser**
-   ```bash
-   # Serve locally (recommended)
-   python -m http.server 8000
-   # or
-   npx serve .
-   
-   # Then visit http://localhost:8000
-   ```
+## Controls
 
-3. **Start experimenting!**
-   - Adjust the sliders to see how parameters affect flocking behavior
-   - Toggle visualizations to understand the underlying algorithms
-   - Click algorithm tabs to learn how each behavior works
+Controls are grouped into Visualization toggles, Parameters (global), and Simulation controls.
 
-## 🎯 How It Works
+### Visualization toggles
+Toggles apply to the focused/selected boid (displayed as the highlighted boid) and help illustrate how rules are computed. Visual toggles are intended to represent flock behavior but are rendered for the selected boid.
 
-### Core Algorithms
+- Field of View  
+  Show a highlighted region where the boid can detect others. The FOV angle can be 0°–360° (0° = none, 360° = full surround). A blind spot remains behind the boid based on the FOV configuration.
 
-**Separation**: Boids steer away from nearby neighbors to avoid crowding
-- Calculates repulsion force based on distance
-- Closer neighbors create stronger repulsion
-- Results in natural spacing between boids
+- Neighbor Lines (red)  
+  Draws lines between the selected boid and any neighbor inside its FOV and range.
 
-**Cohesion**: Boids are attracted to the center of mass of their neighbors
-- Finds average position of nearby boids
-- Steers toward the group's center
-- Creates tight flocking groups
+- Separation Vector (green)  
+  Displays the separation steering vector: the direction and magnitude the boid uses to repel from neighbors.
 
-**Alignment**: Boids try to match the average velocity of their neighbors
-- Calculates average direction of nearby boids
-- Gradually turns to match group movement
-- Results in coordinated group behavior
+- Cohesion Vector (blue)  
+  Displays the cohesion steering vector: the direction and magnitude the boid uses to move toward neighbors’ center of mass.
 
-### Technical Implementation
+- Alignment Vector (yellow)  
+  Displays the alignment steering vector: the direction and magnitude the boid uses to match neighbors’ average heading.
 
-- **Canvas-based rendering** for smooth animation
-- **Modular architecture** with separate UI and simulation layers
-- **Responsive design** that works on desktop and mobile
-- **Real-time parameter updates** without simulation restart
+- Ghost Trail  
+  Toggle a fading trail that visualizes recent boid positions. Trail length is adjustable with a slider.
 
-## 🎨 UI Layout
+- Rule Variation (toggle)  
+  Enables/disables the per-frame wave modulation that scales each rule (0%–100%) over time. When enabled, separation/cohesion/alignment are modulated independently per boid for more organic movement.
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                    🐦 Boids Simulation                   │
-├─────────────┬─────────────────────────┬─────────────────┤
-│   Controls  │                         │   Algorithm     │
-│             │                         │   Showcase      │
-│  • Toggles  │                         │                 │
-│  • Sliders  │                         │  • Tabs         │
-│  • Buttons  │                         │  • Info         │
-│             │                         │  • Mini Demo    │
-├─────────────┴─────────────────────────┴─────────────────┤
-│                                                         │
-│              🎯 Main Simulation Canvas                   │
-│                                                         │
-│  ┌─────────────────────────────────────────────────┐   │
-│  │                                                 │   │
-│  │         Boids flying around here               │   │
-│  │                                                 │   │
-│  └─────────────────────────────────────────────────┘   │
-│                                      📊 Stats          │
-└─────────────────────────────────────────────────────────┘
-```
+### Parameters (affect all boids)
+Sliders change global simulation parameters. Larger coefficients increase the weight of the corresponding rule.
 
-## 🎛️ Controls
+- Field of View — detection range in pixels (affects how far a boid senses others).
+- FOV Angle — viewing cone angle in degrees (0–360). 360° is full surround.
+- Separation Coefficient — weight applied to separation steering (0–50).
+- Cohesion Coefficient — weight applied to cohesion steering (0–50).
+- Alignment Coefficient — weight applied to alignment steering (0–50).
+- Max Speed — upper speed limit for boids (1–10).
+- Min Speed — lower speed limit for boids (0.1–Max Speed).
+- Ghost Trail Length — number of trail samples to render (0 = off).
+- Variation Frequency — frequency of the modulation wave (cycles per second).
+- Variation Amplitude — how deeply the wave modulates rules (0 = no modulation, 1 = full 0–100% modulation).
 
-### Visualization
-- **Field of View**: Shows the detection range of the main boid
-- **Neighbor Lines**: Displays connections between nearby boids
-- **Separation**: Shows repulsion forces (green arrows)
-- **Cohesion**: Shows attraction to group center (blue arrows)
-- **Alignment**: Shows velocity matching forces (yellow arrows)
+Tooltips are available on toggles and sliders to clarify each control.
 
-### Parameters
-- **Field of View**: Detection range (50-300 pixels)
-- **Separation Force**: Strength of repulsion (0-50)
-- **Cohesion Force**: Strength of attraction (0-50)
-- **Alignment Force**: Strength of velocity matching (0-50)
-- **Max Speed**: Maximum boid velocity (1-10)
+### Simulation controls
+- Pause / Resume — stops or continues the simulation (also available in the canvas toolbar).
+- Reset — randomize positions and velocities of all boids. Canvas toolbar includes compact pause/reset at the top-left of the canvas for quick access.
 
-### Simulation
-- **Reset**: Randomize all boid positions and velocities
-- **Pause/Resume**: Stop or continue the simulation
+## Algorithm Showcase
 
-## 📱 Responsive Design
+The Algorithm Showcase provides isolated demos for each core rule. Selecting a tab spawns a dedicated set of demo boids inside the mini-canvas, with only the selected rule applied. This allows direct observation of how each rule influences motion.
 
-The interface automatically adapts to different screen sizes:
-- **Desktop**: Full three-panel layout
-- **Tablet**: Stacked panels with collapsible sections
-- **Mobile**: Single column with expandable controls
+- Separation demo  
+  Demo boids apply only the separation rule. Boids will actively repel from nearby boids to maintain spacing.
 
-## 🔧 Technical Details
+- Cohesion demo  
+  Demo boids apply only the cohesion rule. Boids steer toward the group's center of mass and form clusters.
 
-### Performance Optimizations
-- Pre-allocated static vectors to avoid garbage collection
-- Distance caching between boids to eliminate redundant calculations
-- Efficient DOM manipulation with minimal reflows
-- Smart field-of-view culling for neighbor detection
+- Alignment demo  
+  Demo boids apply only the alignment rule. Boids attempt to match the average heading of neighbors, producing coordinated motion.
 
-### Code Structure
-```
-├── index.html          # Main HTML structure
-├── styles.css          # Modern CSS with CSS Grid and Flexbox
-├── index.js            # Main simulation loop
-├── ui-controller.js    # UI management and event handling
-├── boid.js             # Optimized Boid class
-├── vector.js           # 2D vector mathematics
-├── world.js            # World configuration
-└── utils.js            # Utility functions
-```
+Demo controls (per showcase):
+- Pause/Resume demo animation
+- Reset demo (respawn demo boids)
+- Demo speed control (optional, if available)
 
-## 🎓 Educational Value
+## How it works
 
-This simulation demonstrates:
-- **Emergent behavior** from simple rules
-- **Real-time algorithm visualization**
-- **Interactive parameter exploration**
-- **Performance optimization techniques**
-- **Modern web development practices**
+### Core rules
+- Separation: repel from nearby neighbors; stronger when neighbors are closer.
+- Cohesion: steer toward the average position of neighbors (center of mass).
+- Alignment: steer toward the average velocity/direction of neighbors.
 
-Perfect for:
-- Computer science students learning about emergent systems
-- Developers interested in animation and simulation
-- Anyone curious about how flocking behavior works in nature
+Each rule returns a steering vector that is weighted by its coefficient and (optionally) modulated per-frame by a wave (when Rule Variation is enabled). Final acceleration is composed from these weighted vectors and is applied to the boid’s velocity with speed limits enforced.
 
-## 🚀 Future Enhancements
+### Variation modulation
+When enabled, each rule's strength is multiplied per-frame by a smooth wave (sin or cos) normalized to the range 0.0–1.0. Per-boid random phase offsets desynchronize modulation across the flock for more natural motion. Live tuning sliders control modulation frequency and amplitude.
 
-- [ ] Predator-prey interactions
-- [ ] Obstacle avoidance
-- [ ] 3D boids simulation
-- [ ] Custom boid shapes and colors
-- [ ] Export simulation as GIF/video
-- [ ] Preset behavior patterns
-- [ ] Multi-species flocking
+## UI & Layout
 
-## 📄 License
+- Three-panel layout on desktop: Controls | Canvas | Algorithm Showcase
+- Compact canvas toolbar contains Pause and Reset buttons (top-left)
+- Controls use a two-column compact layout for toggles and sliders to minimize scrolling
+- Tooltips are available on all controls
 
-MIT License - feel free to use this code for educational or commercial projects.
+## Performance notes
 
-## 🤝 Contributing
+- Static pre-allocated vector objects to reduce garbage collection
+- Neighbor distance culling and field-of-view checks to reduce computations
+- DOM updates minimized; visualization elements reused where possible
 
-Contributions welcome! Please feel free to submit pull requests or open issues for bugs and feature requests.
 
----
+## Contributing
 
-**Live Preview**: https://andrewjle.github.io/BoidProject/
-
-Built with ❤️ and modern web technologies
+Contributions welcome. Open issues for bugs or feature requests and submit pull requests for improvements.

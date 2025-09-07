@@ -1,10 +1,8 @@
 /**
- * Finds the distance between two points
- * 
- * @param {number[]} vector1
- * @param {number[]} vector2
- * 
- * @returns {number} The distance between the two points
+ * Compute Euclidean distance between two 2D points.
+ * @param {[number, number]} vector1 - [x1, y1]
+ * @param {[number, number]} vector2 - [x2, y2]
+ * @returns {number}
  */
 function distance2D([x1, y1], [x2, y2]) {
     const deltaX = x2 - x1;
@@ -16,23 +14,21 @@ function distance2D([x1, y1], [x2, y2]) {
 }
 
 /**
- * Generates a random positive number.
- * 
+ * Return a random integer in [min, max).
  * @param {number} min
  * @param {number} max
- * 
- * @returns {number} from min (inclusive) to max (non-inclusive)
+ * @returns {number}
  */
 function randomRange(min, max) {
     return Math.floor(Math.random() * (max - min)) + min;
 }
 
 /**
- * @param {string} a color 1
- * @param {string} b color 2
- * @param {string} c color 3
- * 
- * @returns {string} A random color from a, b, and c
+ * Pick one of three colors at random.
+ * @param {string} a
+ * @param {string} b
+ * @param {string} c
+ * @returns {string}
  */
 function pickOneTriadic(a, b, c) {
     var random = randomRange(1, 4);
@@ -48,12 +44,12 @@ function pickOneTriadic(a, b, c) {
 }
 
 /**
- * @param {string} a color 1
- * @param {string} b color 2
- * @param {string} c color 3
- * @param {string} d color 4
- * 
- * @returns {string} A random color from a, b, c, and d
+ * Pick one of four colors at random.
+ * @param {string} a
+ * @param {string} b
+ * @param {string} c
+ * @param {string} d
+ * @returns {string}
  */
 function pickOneTetradic(a, b, c, d) {
     var random = randomRange(1, 5);

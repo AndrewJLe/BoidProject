@@ -468,6 +468,10 @@ body {
   background: var(--ghost-trail-color);
 }
 
+.toggle-switch:checked+.variation-color {
+  background: var(--accent-color);
+}
+
 /* Sliders */
 .slider-grid {
   display: grid;
@@ -696,12 +700,14 @@ body {
 }
 
 #algorithms-tab .demo-canvas-container {
-  padding: 0.5rem;
+  padding: 0.25rem;
+  /* reduce padding so demo fits without scrolling */
 }
 
 #algorithms-tab #demo-canvas {
   width: 420px;
-  height: 260px;
+  height: 230px;
+  /* slightly shorter to avoid page scroll */
 }
 
 #algorithms-tab .algorithm-info {
@@ -856,6 +862,29 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+}
+
+.demo-controls {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.demo-controls .control-btn {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 140, 255, 0.5);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(4px);
 }
 
 #demo-canvas {
@@ -1012,6 +1041,9 @@ body {
   z-index: 1;
   transition: opacity 0.1s ease-out;
   pointer-events: none;
+  /* Rotate around the triangle's tip like .boids so translate(x,y) places the tip at the position */
+  transform-origin: 0 50%;
+  will-change: transform, opacity;
 }
 
 /* FOV and lines */
@@ -1073,8 +1105,8 @@ body {
   }
 
   #demo-canvas {
-    width: 25rem;
-    height: 15rem;
+    width: 24rem;
+    height: 14rem;
   }
 
   .controls-grid {

@@ -2,28 +2,65 @@ import { WORLD } from "./world.js";
 import { distance2D } from "./utils.js";
 import { Vector2D } from "./vector.js";
 
+/**
+ * Conversion constant from degrees to radians.
+ * @const {number}
+ */
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
+/**
+ * Constants that influence the math of the three boids rules.
+ * @enum {number}
+ */
 const BOIDS_RULES = {
     COHESION_FACTOR: 500,
-    SEPARATION_DISTANCE: 15,
-    ALIGNMENT_FACTOR: 50
+    SEPARATION_DISTANCE: 5,
+    ALIGNMENT_FACTOR: 90
 };
 
+/**
+ * Default runtime settings used for new boids.
+ * @type {{MAX_SPEED:number, MIN_SPEED:number, RANGE:number, FOV_ANGLE:number}}
+ */
 const DEFAULT_SETTINGS = {
-    MAX_SPEED: 4.0,
-    MIN_SPEED: 3.0,
+    MAX_SPEED: 3.0,
+    MIN_SPEED: 1.0,
     RANGE: 150,
-    FOV_ANGLE: 180 * DEGREES_TO_RADIANS,
+    FOV_ANGLE: 250 * DEGREES_TO_RADIANS,
+};
+
+/**
+ * Default variation settings for dynamic per-rule strength modulation.
+ * FREQUENCY is in cycles per second. AMPLITUDE in [0..1].
+ * @type {{FREQUENCY:number, AMPLITUDE:number}}
+ */
+const VARIATION = {
+    FREQUENCY: 0.6,
+    AMPLITUDE: 1.0
 };
 
 // Boid object
+/**
+ * Boid
+ * Represents a single boid with position, velocity, DOM elements and rule helpers.
+ * This class is intentionally optimized to reuse temporary vectors to reduce
+ * garbage collection during animation.
+ */
 class Boid {
     static _tempVector = new Vector2D(0, 0);
     static _tempVector2 = new Vector2D(0, 0);
     static _tempVector3 = new Vector2D(0, 0);
     static ghostTrailEnabled = false;
+    // Toggle for enabling/disabling per-rule variation waves
+    static variationEnabled = true;
+    // Live-tunable variation parameters (can be changed at runtime)
+    static variationFrequency = VARIATION.FREQUENCY;
+    static variationAmplitude = VARIATION.AMPLITUDE;
 
+    /**
+     * Create a new Boid instance.
+     * @param {{id:number, isHighlighted:boolean}} options
+     */
     constructor({ id, isHighlighted }) {
         this.id = id;
         this.highlighted = isHighlighted;
@@ -64,10 +101,20 @@ class Boid {
         );
         this.velocity = this._initializeVelocity();
 
+        // Per-boid variation phase offsets to desynchronize waves
+        this._variationPhase = Math.random() * Math.PI * 2;
+        this._creationTime = performance.now() / 1000; // seconds
+
         // DOM elements
         this.initializeDOMElements(isHighlighted);
     }
 
+    /**
+     * Initialize a starting velocity for the boid.
+     * Boids are biased to face right (positive X) with small random variation.
+     * @returns {Vector2D}
+     * @private
+     */
     _initializeVelocity() {
         // Start all boids facing right (positive x direction) for consistent FOV behavior
         // Add a small random component to prevent all boids from moving in perfect lockstep
@@ -82,6 +129,10 @@ class Boid {
         return velocity;
     }
 
+    /**
+     * Create and attach DOM elements used to render this boid and optional visual helpers.
+     * @param {boolean} isHighlighted - When true, additional steer/FOV visuals are created.
+     */
     initializeDOMElements(isHighlighted) {
         this._createBoidElement();
 
@@ -92,6 +143,11 @@ class Boid {
         }
     }
 
+    /**
+     * Create the main DOM element for this boid and attach it to the canvas.
+     * Also creates the configured number of trail elements.
+     * @private
+     */
     _createBoidElement() {
         this.boidElement = document.createElement("div");
         this.boidElement.setAttribute("id", "boid" + this.id);
@@ -102,6 +158,12 @@ class Boid {
         this._createTrailElements();
     }
 
+    /**
+     * Pre-create DOM elements used for the ghost trail effect.
+     * Elements are appended to the canvas and initially hidden when the global
+     * ghostTrail flag is false.
+     * @private
+     */
     _createTrailElements() {
         for (let i = 0; i < this.maxTrailLength; i++) {
             const trailElement = document.createElement("div");
@@ -117,7 +179,8 @@ class Boid {
     }
 
     /**
-     * Set color for boid and its trail
+     * Set color for boid and its trail elements.
+     * @param {string} color - CSS color used for the boid's left border and trail.
      */
     setColor(color) {
         this.boidElement.style.borderLeftColor = color;
@@ -127,7 +190,9 @@ class Boid {
     }
 
     /**
-     * Set the trail length dynamically
+     * Change the visible trail length for this boid.
+     * This will add or remove trail DOM elements and trim stored positions.
+     * @param {number} newLength - New desired trail length (clamped between 3 and 25).
      */
     setTrailLength(newLength) {
         const oldLength = this.maxTrailLength;
@@ -167,7 +232,9 @@ class Boid {
     }
 
     /**
-     * Set the FOV angle dynamically
+     * Set the Field-Of-View (FOV) angle for this boid.
+     * The provided angle is clamped to [0, 2π] and split equally between left/right.
+     * @param {number} angleInRadians
      */
     setFOVAngle(angleInRadians) {
         // Clamp between 0 and 2π radians (0° to 360°)
@@ -186,6 +253,11 @@ class Boid {
         }
     }
 
+    /**
+     * Create simple DOM elements used to visualize steering vectors.
+     * Creates elements for 'separate', 'cohere', 'align' and 'repel'.
+     * @private
+     */
     _createSteerElements() {
         const steerTypes = ['separate', 'cohere', 'align', 'repel'];
         steerTypes.forEach(type => {
@@ -196,6 +268,13 @@ class Boid {
         });
     }
 
+    /**
+     * Per-frame update: compute neighbor set, apply boids rules (cohesion, separation,
+     * alignment), optional boundary steering and per-rule variation modulation, then
+     * update position according to resulting velocity.
+     * @param {Set<Boid>} flock - Collection of all boids in the simulation
+     * @param {number} deltaT - Time delta in seconds since last update
+     */
     update(flock, deltaT) {
         // Update neighbor information
         this.findNeighborsWithinRange(flock);
@@ -209,12 +288,49 @@ class Boid {
         const v4 = this.boundPosition();
         // const v5 = this.tendToPlace(); // Optional: tendency towards center
 
+        // Compute elapsed time in seconds for smooth variation
+        const now = performance.now() / 1000;
+        const t = now - this._creationTime;
+
+        // Variation multipliers per-rule mapped to range [0,1]
+        // Use different phase offsets per-rule to create richer, desynchronized motion
+        const sepPhase = this._variationPhase + Math.PI * 0.4;
+        const cohPhase = this._variationPhase + Math.PI * 1.2;
+        const aliPhase = this._variationPhase + Math.PI * 2.0;
+
+        // Waves normalized to 0..1 using live-tunable frequency
+        const freq = Boid.variationFrequency || VARIATION.FREQUENCY;
+        const amp = typeof Boid.variationAmplitude === 'number' ? Boid.variationAmplitude : VARIATION.AMPLITUDE;
+
+        const sepWave = 0.5 * (Math.sin(2 * Math.PI * freq * t + sepPhase) + 1);
+        const cohWave = 0.5 * (Math.cos(2 * Math.PI * freq * t + cohPhase) + 1);
+        const aliWave = 0.5 * (Math.sin(2 * Math.PI * freq * t + aliPhase) + 1);
+
+        // Mix with amplitude so amp=1 => full 0..1 range, amp=0 => constant 1
+        const sepMultiplier = Boid.variationEnabled ? ((1 - amp) + amp * sepWave) : 1;
+        const cohMultiplier = Boid.variationEnabled ? ((1 - amp) + amp * cohWave) : 1;
+        const aliMultiplier = Boid.variationEnabled ? ((1 - amp) + amp * aliWave) : 1;
+
+        // Apply multipliers to rule vectors before adding (scale to 0..1)
+        v1.scale(cohMultiplier);
+        v2.scale(sepMultiplier);
+        v3.scale(aliMultiplier);
+
         // Apply all velocity changes
         this.velocity.add(v1);
         this.velocity.add(v2);
         this.velocity.add(v3);
         this.velocity.add(v4);
         // this.velocity.add(v5);
+
+        // Update steer visualizations to match the applied (scaled) forces
+        try {
+            this._drawSteerVector(this.cohereSteerElement, v1, 300, this.showCohere);
+            this._drawSteerVector(this.separateSteerElement, v2, 100, this.showSeparate);
+            this._drawSteerVector(this.alignSteerElement, v3, 500, this.showAlign);
+        } catch (e) {
+            // Non-critical: ignore visualization errors
+        }
 
         // Limit velocity as described in the pseudocode
         this.limitVelocity();
@@ -268,8 +384,10 @@ class Boid {
     }
 
     /**
-     * Rule 2: Boids try to keep a small distance away from other objects
-     * Updated to only affect neighbors within range with distance-based scaling
+     * Rule 2: Separation - Boids try to keep a small distance away from other objects.
+     * The repulsion is scaled by proximity so closer neighbors cause stronger repulsion.
+     * @param {Set<Boid>} flock
+     * @returns {Vector2D}
      */
     rule2(flock) {
         // If separation coefficient is 0, don't apply this rule at all
@@ -307,9 +425,13 @@ class Boid {
         this._drawSteerVector(this.separateSteerElement, c, 100, this.showSeparate);
 
         return c;
-    }    /**
-     * Rule 3: Boids try to match velocity with near boids
-     * Updated to only consider neighbors within range
+    }
+    /**
+     * Rule 3: Alignment - Boids try to match velocity with nearby boids.
+     * Returns a steering vector that is a fraction of the difference between
+     * perceived average neighbor velocity and this boid's velocity.
+     * @param {Set<Boid>} flock
+     * @returns {Vector2D}
      */
     rule3(flock) {
         // If alignment coefficient is 0, don't apply this rule at all
@@ -351,7 +473,9 @@ class Boid {
     }
 
     /**
-     * Limiting the speed as described in the pseudocode
+     * Limit this boid's velocity to the configured maximum and minimum speeds.
+     * This mutates `this.velocity` in-place.
+     * @private
      */
     limitVelocity() {
         const vlim = this.maxSpeed;
@@ -369,30 +493,59 @@ class Boid {
     }
 
     /**
-     * Bounding the position as described in the pseudocode
+     * Compute a smooth, distance-weighted steering force to keep the boid inside
+     * the world bounds. The returned vector should be added to the boid's
+     * velocity to gently steer it away from edges.
+     * @returns {Vector2D}
+     * @private
      */
     boundPosition() {
+        // Smooth, distance-weighted steering away from boundaries to avoid hard bounces
         const v = new Vector2D(0, 0);
         const { CANVAS_WIDTH, CANVAS_HEIGHT } = WORLD;
-        const margin = 20;
+        const margin = Math.min(100, Math.max(30, this.range / 2)); // dynamic margin
 
-        if (this.position.x < margin) {
-            v.x = 10;
-        } else if (this.position.x > CANVAS_WIDTH - margin) {
-            v.x = -10;
+        // Maximum steering force applied when touching the wall (tunable)
+        const maxForce = Math.max(0.5, this.maxSpeed * 0.25);
+
+        // X axis
+        const distLeft = this.position.x;
+        if (distLeft < margin) {
+            // f in [0..1], stronger when closer; use quadratic easing
+            let f = 1 - (distLeft / margin);
+            f = f * f;
+            v.x += maxForce * f; // push right
         }
 
-        if (this.position.y < margin) {
-            v.y = 10;
-        } else if (this.position.y > CANVAS_HEIGHT - margin) {
-            v.y = -10;
+        const distRight = CANVAS_WIDTH - this.position.x;
+        if (distRight < margin) {
+            let f = 1 - (distRight / margin);
+            f = f * f;
+            v.x -= maxForce * f; // push left
+        }
+
+        // Y axis
+        const distTop = this.position.y;
+        if (distTop < margin) {
+            let f = 1 - (distTop / margin);
+            f = f * f;
+            v.y += maxForce * f; // push down
+        }
+
+        const distBottom = CANVAS_HEIGHT - this.position.y;
+        if (distBottom < margin) {
+            let f = 1 - (distBottom / margin);
+            f = f * f;
+            v.y -= maxForce * f; // push up
         }
 
         return v;
     }
 
     /**
-     * Tendency towards a particular place (center of screen)
+     * Optional tendency force to steer boids back towards the center of the world.
+     * Returns a small steering vector when the boid is far from the center.
+     * @returns {Vector2D}
      */
     tendToPlace() {
         const { CANVAS_WIDTH, CANVAS_HEIGHT } = WORLD;
@@ -415,7 +568,7 @@ class Boid {
     }
 
     /**
-     * Toggle FOV state and update visuals accordingly
+     * Toggle FOV state and update visuals accordingly.
      */
     toggleFOV() {
         this.FOVEnabled = !this.FOVEnabled;
@@ -423,7 +576,7 @@ class Boid {
     }
 
     /**
-     * Update FOV display based on current FOVEnabled state
+     * Update FOV DOM visualization based on `this.FOVEnabled`.
      */
     updateFOVDisplay() {
         if (this.FOVEnabled) {
@@ -447,6 +600,10 @@ class Boid {
         }
     }
 
+    /**
+     * Create SVG elements used to visualize the boid's field of view.
+     * @private
+     */
     _createFOVElements() {
         // Calculate view percentage based on current FOV angle
         const totalFOVAngle = this.leftSideFOV + this.rightSideFOV;
@@ -463,6 +620,12 @@ class Boid {
         this.boidElement.appendChild(this.SVGElement);
     }
 
+    /**
+     * Helper to set common attributes for the FOV SVG container.
+     * @param {SVGElement} svg
+     * @param {number} size
+     * @private
+     */
     _setSVGAttributes(svg, size) {
         svg.setAttribute("height", size);
         svg.setAttribute("width", size);
@@ -474,11 +637,16 @@ class Boid {
         svg.classList.add("FOV");
     }
 
+    /**
+     * (Legacy helper) Set attributes for a blind-spot style visualization.
+     * This function computes a dash array to indicate visible versus hidden arcs.
+     * @private
+     */
     _setBlindSpotAttributes(circle, range, circumference, viewPercentage) {
         const radius = range / 2;
 
         // Calculate the dash array for the FOV visualization
-        // For FOV visualization, we want to show the blind spot (the area the boid can't see)
+        // For FOV visualization, show the blind spot (the area the boid can't see) as a dashed arc
         const visibleArc = viewPercentage * circumference / 100;
         const blindArc = circumference - visibleArc;
 
@@ -492,7 +660,6 @@ class Boid {
             "stroke": "#ff6b6b", // Changed to a more visible red color
             "stroke-opacity": this.FOVEnabled ? "0.4" : "0", // Increased opacity
             "stroke-width": "3", // Made stroke thinner and more visible
-            // Show the blind spot as dashed line - if FOV is 180°, show the back half as blind spot
             "stroke-dasharray": blindArc > 0 ? `${visibleArc} ${blindArc}` : "none"
         };
 
@@ -504,7 +671,13 @@ class Boid {
     }
 
     /**
-     * Create FOV sector path attributes - shows the visible area as a filled sector
+     * Create FOV sector path attributes - shows the visible area as a filled sector.
+     * The resulting path is centered on the boid's local forward (right) and relies
+     * on the boid element rotation to orient it.
+     * @param {SVGPathElement} path
+     * @param {number} range
+     * @param {number} totalFOVAngle
+     * @private
      */
     _setFOVSectorAttributes(path, range, totalFOVAngle) {
         const centerX = range;
@@ -569,6 +742,10 @@ class Boid {
         path.classList.add("fov-sector");
     }
 
+    /**
+     * Remove any created FOV DOM elements from the boid element.
+     * @private
+     */
     _removeFOVElements() {
         if (this.SVGElement) {
             this.SVGElement.remove();
@@ -578,7 +755,13 @@ class Boid {
     }
 
     /**
-     * Helper method for drawing steer vectors
+     * Draw a steer vector visualization using a DOM element.
+     * When `shouldDraw` is false or the vector is zero the element will be hidden.
+     * @param {HTMLElement} element
+     * @param {Vector2D} vector
+     * @param {number} scale
+     * @param {boolean} shouldDraw
+     * @private
      */
     _drawSteerVector(element, vector, scale, shouldDraw) {
         if (!element) return;
@@ -609,7 +792,10 @@ class Boid {
     }
 
     /**
-     * Find neighbors for visualization purposes (the core rules use the entire flock)
+     * Collect neighbors within this boid's range and populate cached distances.
+     * Returns the set of neighbors that also pass this boid's FOV test.
+     * @param {Set<Boid>} flock
+     * @returns {Set<Boid>}
      */
     findNeighborsWithinRange(flock) {
         // Clear previous neighbor distances
@@ -637,6 +823,13 @@ class Boid {
         return this.neighbors;
     }
 
+    /**
+     * Test whether another boid is within this boid's configured field-of-view.
+     * Uses the boid velocity as the forward direction.
+     * @param {Boid} otherBoid
+     * @returns {boolean}
+     * @private
+     */
     _isInFieldOfView(otherBoid) {
         // Calculate vector from this boid to other boid (reuse temp vector)
         Boid._tempVector.x = otherBoid.position.x - this.position.x;
@@ -647,7 +840,11 @@ class Boid {
     }
 
     /**
-     * Optimized line drawing with fewer calculations
+     * Draw a short line element representing a vector originating from the boid.
+     * The method clamps the vector to this.range and positions/rotates the element.
+     * @param {HTMLElement} lineElement
+     * @param {Vector2D} vector
+     * @param {Object} [styles]
      */
     drawLine(lineElement, vector, styles = {}) {
         if (!lineElement) return;
@@ -684,7 +881,8 @@ class Boid {
     }
 
     /**
-     * Main drawing method with trail effects and optimized conditional rendering
+     * Main render method called each frame to draw the boid and optional visuals
+     * such as ghost trails, FOV and neighbor lines.
      */
     draw() {
         // Only update and draw trails when the global flag is enabled.
@@ -719,7 +917,8 @@ class Boid {
     }
 
     /**
-     * Update trail positions
+     * Push the current boid transform into the trail history and clamp its length.
+     * @private
      */
     _updateTrail() {
         // Add current position to trail
@@ -736,23 +935,42 @@ class Boid {
     }
 
     /**
-     * Draw the ghost trail effect
+     * Render the ghost trail by mapping stored trailPositions to DOM elements.
+     * The first trail element should correspond to the boid's current transform.
+     * @private
      */
     _drawTrail() {
-        this.trailPositions.forEach((pos, index) => {
-            if (index > 0 && index < this.trailElements.length) {
-                const trailElement = this.trailElements[index - 1];
-                const opacity = (this.maxTrailLength - index) / this.maxTrailLength * 0.6;
-                const scale = (this.maxTrailLength - index) / this.maxTrailLength * 0.8 + 0.2;
+        // Ensure the first trail element corresponds to the boid's current position
+        for (let i = 0; i < this.trailElements.length; i++) {
+            const trailElement = this.trailElements[i];
+            const pos = this.trailPositions[i];
 
+            if (!trailElement) continue;
+
+            // If we don't have a saved position for this index, hide the element
+            if (!pos) {
+                try {
+                    trailElement.style.opacity = '0';
+                    trailElement.style.display = 'none';
+                } catch (e) { /* ignore DOM errors */ }
+                continue;
+            }
+
+            const opacity = (this.maxTrailLength - i) / this.maxTrailLength * 0.4;
+            const scale = (this.maxTrailLength - i) / this.maxTrailLength * 0.8 + 0.2;
+
+            try {
+                trailElement.style.display = 'block';
                 trailElement.style.opacity = opacity;
                 trailElement.style.transform = `translate(${pos.x}px, ${pos.y}px) rotateZ(${pos.angle}rad) scale(${scale})`;
+            } catch (e) {
+                // defensive: ignore DOM write errors
             }
-        });
+        }
     }
 
     /**
-     * Optimized boid drawing with cached transforms
+     * Apply the current position and facing rotation to the boid's DOM element.
      */
     drawBoid() {
         const rotationInRadians = this.velocity.angle();
@@ -761,14 +979,14 @@ class Boid {
     }
 
     /**
-     * Debug method for logging boid details
+     * Log basic runtime info for this boid (position and velocity).
      */
     logBoidDetails() {
         console.log(`Boid ${this.id}: pos(${this.position.x.toFixed(2)}, ${this.position.y.toFixed(2)}) vel(${this.velocity.x.toFixed(2)}, ${this.velocity.y.toFixed(2)})`);
     }
 
     /**
-     * Optimized neighbor line drawing with better cleanup
+     * Draw lines to neighbor boids (used for debugging/visualization in highlighted boids).
      */
     drawNeighbors() {
         if (!this.showNeighbors) {
@@ -790,6 +1008,10 @@ class Boid {
         }
     }
 
+    /**
+     * Remove DOM lines that correspond to boids no longer within range.
+     * @private
+     */
     _cleanupOutOfRangeLines() {
         const currentNeighborIds = new Set([...this.neighbors].map(b => b.id));
 
@@ -801,11 +1023,19 @@ class Boid {
         }
     }
 
+    /**
+     * Remove all neighbor line elements and clear the cache.
+     * @private
+     */
     _cleanupAllNeighborLines() {
         Object.values(this.neighborLineElements).forEach(element => element?.remove());
         this.neighborLineElements = {};
     }
 
+    /**
+     * Hide all currently existing neighbor line elements.
+     * @private
+     */
     _hideAllNeighborLines() {
         Object.values(this.neighborLineElements).forEach(element => {
             if (element) element.style.display = 'none';
@@ -813,7 +1043,8 @@ class Boid {
     }
 
     /**
-     * Optimized line drawing to other boids
+     * Draw a line to another boid using the cached neighbor distance when available.
+     * @param {Boid} otherBoid
      */
     drawLineToOtherBoid(otherBoid) {
         if (!this.showNeighbors) return;
@@ -841,6 +1072,12 @@ class Boid {
         this.drawLine(lineElement, Boid._tempVector, styles);
     }
 
+    /**
+     * Create and append a neighbor-line DOM element for the given boid.
+     * @param {Boid} otherBoid
+     * @returns {HTMLElement}
+     * @private
+     */
     _createNeighborLineElement(otherBoid) {
         const lineElement = document.createElement("div");
         lineElement.classList.add("neighbor-line");

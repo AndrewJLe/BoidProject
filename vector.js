@@ -1,13 +1,21 @@
+/**
+ * Simple 2D vector utility used by the boids simulation.
+ * The implementation is intentionally minimal to keep the hot path fast.
+ */
 class Vector2D {
+    /**
+     * @param {number} x
+     * @param {number} y
+     */
     constructor(x, y) {
         this.x = x;
         this.y = y;
     }
 
     /**
-     * Adds vector2 to this vector
-     * 
+     * Add another vector to this vector (in-place).
      * @param {Vector2D} vector2
+     * @returns {void}
      */
     add(vector2) {
         this.x += vector2.x;
@@ -15,8 +23,9 @@ class Vector2D {
     }
 
     /**
-     * Subtracts vector2 from this vector
+     * Subtract another vector from this vector (in-place).
      * @param {Vector2D} vector2
+     * @returns {void}
      */
     subtract(vector2) {
         this.x -= vector2.x;
@@ -24,18 +33,17 @@ class Vector2D {
     }
 
     /**
-     * Gets the magnitude of this vector
-     * 
-     * @returns {number} The magnitude of this vector
+     * Compute the magnitude (length) of this vector.
+     * @returns {number}
      */
     magnitude() {
         return Math.sqrt(this.x * this.x + this.y * this.y);
     }
 
     /**
-     * Gets the normalized vector of this vector
-     * 
-     * @returns {Vector2D} Returns the normalized vector of this vector
+     * Return a new normalized vector (unit length) with the same direction.
+     * Note: does not mutate the original vector.
+     * @returns {Vector2D}
      */
     normalize() {
         const coeff = 1 / this.magnitude();
@@ -43,9 +51,9 @@ class Vector2D {
     }
 
     /**
-     * Scales a vector by the scaling factor
-     * 
-     * @param {number} scalingFactor 
+     * Scale this vector in-place by a scalar factor.
+     * @param {number} scalingFactor
+     * @returns {Vector2D}
      */
     scale(scalingFactor) {
         this.x *= scalingFactor;
@@ -55,20 +63,17 @@ class Vector2D {
     }
 
     /**
-     * Finds the angle of this vector in radians.
-     * 
-     * @returns {number} The angle of this vector in radians
+     * Angle (radians) of this vector relative to the positive X axis.
+     * @returns {number}
      */
     angle() {
         return Math.atan2(this.y, this.x);
     }
 
     /**
-     * Finds the angle between this vector and another vector in radians
-     * 
-     * @param {Vector2D} vector2 
-     * 
-     * @returns {number} Returns the angle between this vector and another vector in radians
+     * Angle between this vector and another vector in radians, normalized to (-π, π].
+     * @param {Vector2D} vector2
+     * @returns {number}
      */
     angleBetweenVectors(vector2) {
         var angle = vector2.angle() - this.angle();

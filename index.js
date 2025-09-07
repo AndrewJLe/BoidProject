@@ -6,9 +6,12 @@ import { WORLD, appendFlock, flock } from "./world.js";
 let isPaused = false;
 let lastTimestamp = 0;
 
+/**
+ * Initialize the simulation: create the canvas container, spawn boids and start the game loop.
+ */
 function init() {
     /**
-     * Initialize Canvas with modern styling
+     * Create the canvas DOM element used for positioning boid elements.
      */
     const canvasElement = document.createElement("div");
     canvasElement.setAttribute("id", "canvas");
@@ -19,7 +22,7 @@ function init() {
     document.getElementById("canvas-container").appendChild(canvasElement);
 
     /**
-     * Initialize Boids with improved colors
+     * Spawn boids using a modern default color palette.
      */
     for (let i = 0; i < WORLD.NUM_BOIDS; i++) {
         const isHighlighted = i === 0;
@@ -52,20 +55,23 @@ function init() {
     window.requestAnimationFrame(gameLoop);
 }
 
+/**
+ * Main animation loop. Calls update/draw on every boid when not paused.
+ * @param {number} timestamp - DOMHighResTimeStamp provided by requestAnimationFrame
+ */
 function gameLoop(timestamp) {
     if (!isPaused) {
         let deltaT = (timestamp - lastTimestamp) * WORLD.TIME_SCALE;
         deltaT = Math.min(deltaT, 50);
-
         for (let i = 0; i < flock.length; i++) {
             const boid = flock[i];
             boid.update(flock, deltaT);
             boid.draw();
         }
     }
-
     lastTimestamp = timestamp;
     window.requestAnimationFrame(gameLoop);
+
 }
 
 // Initialize when DOM is ready
