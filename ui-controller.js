@@ -285,15 +285,53 @@ class UIController {
     }
 
     /**
-     * Read FOV slider and apply angle (degrees -> radians) to all boids.
+     * Read the FOV angle slider and set the boids' FOV accordingly.
+     *
+     * Converts degrees to radians and calls boid.setFOVAngle on existing boids
+     * if that method is available. If boid instances are plain objects or not
+     * fully constructed yet, fall back to setting FOV-related properties
+     * directly and calling updateFOVDisplay when available.
      */
     initializeFOVAngles() {
-        const fovAngleRange = document.getElementById("fov-angle-range");
-        const initialAngle = fovAngleRange ? parseInt(fovAngleRange.value) : 360;
+        const fovAngleRange = document.getElementById('fov-angle-range');
+        const initialAngle = fovAngleRange ? parseInt(fovAngleRange.value, 10) : 360;
         const angleInRadians = (initialAngle * Math.PI) / 180;
-        if (window.flock && window.flock.length > 0) {
-            window.flock.forEach((boid) => boid.setFOVAngle(angleInRadians));
-        }
+
+        if (!window.flock || window.flock.length === 0) return;
+
+        window.flock.forEach(boid => {
+            try {
+                if (!boid) return;
+
+                // Preferred API: call the Boid instance method when present
+                if (typeof boid.setFOVAngle === 'function') {
+                    boid.setFOVAngle(angleInRadians);
+                    if (typeof boid.updateFOVDisplay === 'function') {
+                        boid.updateFOVDisplay();
+                    }
+                    return;
+                }
+
+                // Fallback: set common FOV properties used by visualization code.
+                // Many code paths expect leftSideFOV/rightSideFOV in radians.
+                const half = angleInRadians / 2;
+                if ('leftSideFOV' in boid && 'rightSideFOV' in boid) {
+                    boid.leftSideFOV = half;
+                    boid.rightSideFOV = half;
+                } else {
+                    // Generic fallback property
+                    boid.FOVAngle = angleInRadians;
+                }
+
+                // If the object exposes an update/display hook, call it.
+                if (typeof boid.updateFOVDisplay === 'function') {
+                    boid.updateFOVDisplay();
+                }
+            } catch (err) {
+                // Non-fatal: continue for other boids and log for debugging
+                console.warn('initializeFOVAngles: failed to apply FOV to a boid', err);
+            }
+        });
     }
 
     /**
